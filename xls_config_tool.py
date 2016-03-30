@@ -116,7 +116,7 @@ class LogHelp :
         import logging
 
         LogHelp._logger = logging.getLogger()
-        logfile = 'xls_deploy_tool.log'
+        logfile = 'xls_config_tool.log'
         hdlr = logging.FileHandler(logfile)
         formatter = logging.Formatter('%(asctime)s|%(levelname)s|%(lineno)d|%(funcName)s|%(message)s')
         hdlr.setFormatter(formatter)
@@ -194,7 +194,7 @@ class SheetInterpreter:
 
         self._LayoutFileHeader()
 
-        package_name_line = "package xls." + os.path.splitext(os.path.basename(self._xls_file_path))[0] + ";\n"
+        package_name_line = "package xlsconfig." + os.path.splitext(os.path.basename(self._xls_file_path))[0] + ";\n"
         self._output.append(package_name_line)
 
         self._LayoutStructHead(self._sheet_name)
