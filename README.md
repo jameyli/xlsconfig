@@ -1,10 +1,14 @@
 # xlsconfig
 游戏配置读取工具, 已成功应用于多个项目
 
-### 功能：
+### 功能
 1. 配置定义生成，根据 excel 自动生成配置的 ProtoBuff(PB) 定义
 2. 配置数据导出，将配置数据生成PB的序列化后的二进制数据或者文本(json)数据
 3. 只要程序语言支持PB即可
+
+### 优点
+* 定义和数据在一起，避免修改不同步
+* 基于 PB 自动实现配置数据的读取
 
 ### 说明:
 #### 每个页签独立定义了一张表
@@ -50,4 +54,29 @@ excel 的前四行用于结构定义, 第五行开始为数据
 * .txt 配置内容 proto 编码后的明文(json)格式，可以使用对应的PB直接读取
 * .py 由 proto 生成的 python 脚本，工具自己生成，可删除
 * .log 工具运行日志
+
+## 程序中如何读取？
+### C++
+```c++
+	const char* data_file = "xlsconfig_goods_conf.data"
+	FILE* file = fopen(data_file, "rb");
+	assert(file);
+	if (!file) {
+		return -1;
+	}
+
+	static char data[1024 * 1024 * 10];
+	size_t readn = fread(data, 1, sizeof(data), file);
+	fclose(file);
+
+	GOODS_CONF_ARRAY conf_array;
+	bool parse_ret = conf_array.ParseFromArray(data, readn);
+	if (!parse_ret) {
+		LOG_ERROR(0, 0, "%s|ParseFromString failed", data_file);
+		return -2;
+	}
+
+```
+
+
 
