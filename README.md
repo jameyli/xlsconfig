@@ -37,7 +37,7 @@ excel 的前四行用于结构定义, 第五行开始为数据
 * xlrd
 
 ### 注意:
-* 表名sheet_name 使用大写
+* 表名 sheet_name 非字母开头的会跳过
 * 默认值
 
 ## Run Example

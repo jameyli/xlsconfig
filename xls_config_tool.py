@@ -686,7 +686,7 @@ if __name__ == '__main__' :
     sheet_name_list = workbook.sheet_names()
 
     for sheet_name in sheet_name_list :
-        if sheet_name[0] == '#' :
+        if sheet_name[0] == '#':
             continue
 
         if op == 0 or op == 1:
