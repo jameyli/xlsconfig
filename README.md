@@ -58,7 +58,13 @@ excel 的前四行用于结构定义, 第五行开始为数据
 ## 程序中如何读取？
 ### C++
 ```c++
-	const char* data_file = "xlsconfig_goods_conf.data"
+#include <cstdio>
+#include <string>
+#include "xlsconfig_goods_conf.pb.h"
+#include <google/protobuf/text_format.h>
+
+int main(int argc, char* argv[]) {
+	const char* data_file = "xlsconfig_goods_conf.data";
 	FILE* file = fopen(data_file, "rb");
 	assert(file);
 	if (!file) {
@@ -69,14 +75,14 @@ excel 的前四行用于结构定义, 第五行开始为数据
 	size_t readn = fread(data, 1, sizeof(data), file);
 	fclose(file);
 
-	GOODS_CONF_ARRAY conf_array;
+	xlsconfig::goods::GOODS_CONF_ARRAY conf_array;
 	bool parse_ret = conf_array.ParseFromArray(data, readn);
 	if (!parse_ret) {
-		LOG_ERROR(0, 0, "%s|ParseFromString failed", data_file);
 		return -2;
 	}
 
+	printf("config load|%s", conf_array.ShortDebugString().c_str());
+	return 0;
+}
 ```
-
-
 
