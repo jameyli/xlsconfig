@@ -43,9 +43,9 @@ excel 的前四行用于结构定义, 第五行开始为数据
 ## Run Example
 ```
      cd example
-     ../xls_config_tools.py GOODS_CONF goods.xls
+     ../xls_config_tools.py goods.xls
 ```
-输出的内容
+输出的内容, 每个页签独立, 都分别输出以下文件
 * .proto 配置的定义, 基于PB，程序可选择静态编译对应的语言，或者运行时动态载入
 * .data 配置内容 proto 编码后的二进制格式，可以使用对应的PB定义直接解码读取
 * .txt 配置内容 proto 编码后的明文(json)格式，可以使用对应的PB直接读取

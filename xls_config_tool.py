@@ -652,8 +652,8 @@ class DataParser:
             raise
 
     def _WriteData2File(self, data) :
-        file_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + ".data"
-        file = open(file_name, 'wb+')
+        self._data_file_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + ".data"
+        file = open(self._data_file_name, 'wb+')
         file.write(data)
         file.close()
 
@@ -666,42 +666,48 @@ class DataParser:
 
 
 if __name__ == '__main__' :
-    """入口"""
-    if len(sys.argv) < 3 :
-        print "Usage: %s sheet_name(should be upper) xls_file" %(sys.argv[0])
+    if len(sys.argv) < 2 :
+        print "Usage: %s xls_file" %(sys.argv[0])
         sys.exit(-1)
 
-    # option 0 生成proto和data 1 只生成proto 2 只生成data
+    # option 0 生成proto和data; 1 只生成proto; 2 只生成data
     op = 0
-    if len(sys.argv) > 3 :
-        op = int(sys.argv[3])
+    if len(sys.argv) > 2 :
+        op = int(sys.argv[2])
 
-    sheet_name =  sys.argv[1]
-    if (not sheet_name.isupper()):
-        print "sheet_name should be upper"
+    xls_file_path =  sys.argv[1]
+
+    try :
+        workbook = xlrd.open_workbook(xls_file_path)
+    except BaseException, e :
+        print Color.RED + "Open %s failed! File is NOT exist!" %(xls_file_path) + Color.NONE
         sys.exit(-2)
 
-    xls_file_path =  sys.argv[2]
+    sheet_name_list = workbook.sheet_names()
 
-    if op == 0 or op == 1:
-        try :
-            tool = SheetInterpreter(xls_file_path, sheet_name)
-            tool.Interpreter()
-        except BaseException, e :
-            print Color.RED + "Interpreter %s Failed!!!" %(sheet_name) + Color.NONE
-            print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
-            sys.exit(-3)
+    for sheet_name in sheet_name_list :
+        if sheet_name[0] == '#' :
+            continue
 
-        #  print Color.GREEN + "Interpreter %s Success!!!"  %(sheet_name) + Color.NONE
+        if op == 0 or op == 1:
+            try :
+                interpreter = SheetInterpreter(xls_file_path, sheet_name)
+                interpreter.Interpreter()
+            except BaseException, e :
+                print Color.RED + "Interpreter %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
+                print Color.YELLOW, "row: ", interpreter._row + 1, "col: ", interpreter._col + 1, "ERROR: ", e, Color.NONE
+                sys.exit(-3)
 
-    if op == 0 or op == 2:
-        try :
-            parser = DataParser(xls_file_path, sheet_name)
-            parser.Parse()
-        except BaseException, e :
-            print Color.RED + "Parse %s Failed!!!" %(sheet_name) + Color.NONE
-            print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
-            sys.exit(-4)
+            print Color.GREEN + "Interpreter %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
-        #  print Color.GREEN + "Parse %s Success!!!" %(sheet_name) + Color.NONE
+        if op == 0 or op == 2:
+            try :
+                parser = DataParser(xls_file_path, sheet_name)
+                parser.Parse()
+            except BaseException, e :
+                print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
+                print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
+                sys.exit(-4)
+
+            print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
