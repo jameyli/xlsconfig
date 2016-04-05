@@ -666,6 +666,10 @@ class DataParser:
         file.close()
 
 def ProcessOneFile(xls_file_path, op) :
+    if not ".xls" in xls_file_path :
+        print "Skip %s" %(xls_file_path)
+        return
+
     try :
         workbook = xlrd.open_workbook(xls_file_path)
     except BaseException, e :
