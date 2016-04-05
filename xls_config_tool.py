@@ -316,7 +316,11 @@ class SheetInterpreter:
                     + " " + field_name + " = " + self._GetAndAddFieldIndex() + ";\n")
             return
 
-        if field_type == "int32" or field_type == "int64"\
+        if field_type == "bool" :
+                self._output.append(" "*self._indentation + field_rule + " " + field_type \
+                        + " " + field_name + " = " + self._GetAndAddFieldIndex()\
+                        + " [default = false]" + ";\n")
+        elif field_type == "int32" or field_type == "int64"\
                 or field_type == "uint32" or field_type == "uint64"\
                 or field_type == "sint32" or field_type == "sint64"\
                 or field_type == "fixed32" or field_type == "fixed64"\
@@ -598,7 +602,12 @@ class DataParser:
         LOG_INFO("%d|%d|%s", row, col, field_value)
 
         try:
-            if field_type == "int32" or field_type == "int64"\
+            if field_type == "bool" :
+                if len(str(field_value).strip()) <=0 :
+                    return False
+                else :
+                    return (True if int(field_value) != 0 else False)
+            elif field_type == "int32" or field_type == "int64"\
                     or  field_type == "uint32" or field_type == "uint64"\
                     or field_type == "sint32" or field_type == "sint64"\
                     or field_type == "fixed32" or field_type == "fixed64"\
