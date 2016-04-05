@@ -200,7 +200,7 @@ class SheetInterpreter:
 
                 self._col += 1
 
-        elif field_rule == "struct" :
+        elif "struct" in field_rule :
             field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col))
             # struct_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
             # field_name = str(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).strip()
@@ -533,7 +533,9 @@ class DataParser:
 
                 self._col += 1
 
-        elif field_rule == "struct" :
+        elif "struct" in field_rule :
+            field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col))
+            #
             field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col))
             # struct_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
             # field_name = str(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).strip()
@@ -663,20 +665,7 @@ class DataParser:
         file.write(data)
         file.close()
 
-
-
-if __name__ == '__main__' :
-    if len(sys.argv) < 2 :
-        print "Usage: %s xls_file" %(sys.argv[0])
-        sys.exit(-1)
-
-    # option 0 生成proto和data; 1 只生成proto; 2 只生成data
-    op = 0
-    if len(sys.argv) > 2 :
-        op = int(sys.argv[2])
-
-    xls_file_path =  sys.argv[1]
-
+def ProcessOneFile(xls_file_path, op) :
     try :
         workbook = xlrd.open_workbook(xls_file_path)
     except BaseException, e :
@@ -686,7 +675,10 @@ if __name__ == '__main__' :
     sheet_name_list = workbook.sheet_names()
 
     for sheet_name in sheet_name_list :
-        if sheet_name[0] == '#':
+        #  if sheet_name[0] == '#':
+        #      continue
+        if (not sheet_name.isupper()):
+            print "Skip %s" %(sheet_name)
             continue
 
         if op == 0 or op == 1:
@@ -710,4 +702,28 @@ if __name__ == '__main__' :
                 sys.exit(-4)
 
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
+
+def ProcessPath(file_path, op) :
+    if os.path.isfile(file_path) :
+        ProcessOneFile(file_path, op)
+    elif os.path.isdir(file_path) :
+        path_list = os.listdir(file_path)
+        for path in path_list :
+            real_file_path = file_path+"/"+path
+            ProcessPath(real_file_path, op)
+
+
+if __name__ == '__main__' :
+    if len(sys.argv) < 2 :
+        print "Usage: %s xls_file" %(sys.argv[0])
+        sys.exit(-1)
+
+    # option 0 生成proto和data; 1 只生成proto; 2 只生成data
+    op = 0
+    if len(sys.argv) > 2 :
+        op = int(sys.argv[2])
+
+    xls_file_path =  sys.argv[1]
+    ProcessPath(xls_file_path, op)
+
 
