@@ -21,9 +21,25 @@ FIELD_RULE_ROW = 0
 FIELD_TYPE_ROW = 1
 FIELD_NAME_ROW = 2
 FIELD_COMMENT_ROW = 3
+DATA_BEGIN_ROW = 4
 
-OUTPUT_FULE_PATH_BASE="xlsconfig_"
+PROTOC_BIN = "protoc "
 
+OUTPUT_PATH = "" #output/"
+PROTO_OUTPUT_PATH = ""#OUTPUT_PATH + "proto/"
+BYTES_OUTPUT_PATH = ""#OUTPUT_PATH + "bytes/"
+JSON_OUTPUT_PATH = ""#OUTPUT_PATH + "json/"
+LUA_OUTPUT_PATH = ""#OUTPUT_PATH + "lua/"
+
+CPP_OUTPUT_PATH = ""#PROTO_OUTPUT_PATH + "cpp/"
+PYTHON_OUTPUT_PATH = ""#PROTO_OUTPUT_PATH + "python/"
+
+OUTPUT_FULE_PATH_BASE = "xlsc_"
+
+DIGITAL_TYPES = ["int32", "int64", "uint32", "uint64", "double", "float"]
+
+###############################################################################
+# 日志相关
 class Color :
     BLACK = "\033[30m"
     RED = "\033[31m"
@@ -80,24 +96,30 @@ LOG_DEBUG=LogHelp.get_logger().debug
 LOG_INFO=LogHelp.get_logger().info
 LOG_WARN=LogHelp.get_logger().warn
 LOG_ERROR=LogHelp.get_logger().error
+###############################################################################
 
+class StuctItem:
+    def __init__(self):
+        self.field_num = 1
+        self.repeated_count = 1
+        self.struct_name = ""
+
+class FieldItem:
+    def __init__(self):
+        self.rule = ""
+        self.typename = ""
+        self.name = ""
+        self.comment = ""
+        self.default_value = ""
+        self.group = None
+        self.struct = None
 
 class SheetInterpreter:
     """通过excel配置生成配置的protobuf定义文件"""
-    def __init__(self, xls_file_path, sheet_name):
+    def __init__(self, xls_file_path, sheet):
         self._xls_file_path = xls_file_path
-        self._sheet_name = sheet_name
-
-        try :
-            self._workbook = xlrd.open_workbook(self._xls_file_path)
-        except BaseException, e :
-            print "open xls file(%s) failed!"%(self._xls_file_path)
-            raise
-
-        try :
-            self._sheet =self._workbook.sheet_by_name(self._sheet_name)
-        except BaseException, e :
-            print "open sheet(%s) failed!"%(self._sheet_name)
+        self._sheet = sheet
+        self._sheet_name = self._sheet.name
 
         # 行数和列数
         self._row_count = len(self._sheet.col_values(0))
@@ -118,7 +140,7 @@ class SheetInterpreter:
         # 保存所有结构的名字
         self._struct_name_list = []
 
-        self._pb_file_name = OUTPUT_FULE_PATH_BASE + sheet_name.lower() + ".proto"
+        self._pb_file_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + ".proto"
 
 
     def Interpreter(self) :
@@ -127,14 +149,14 @@ class SheetInterpreter:
 
         self._LayoutFileHeader()
 
-        package_name_line = "package xlsconfig." + os.path.splitext(os.path.basename(self._xls_file_path))[0] + ";\n"
+        package_name_line = "package xlsc." + os.path.splitext(os.path.basename(self._xls_file_path))[0] + ";\n"
         self._output.append(package_name_line)
 
         self._LayoutStructHead(self._sheet_name)
         self._IncreaseIndentation()
 
         while self._col < self._col_count :
-            self._FieldDefine(0)
+            self._FieldDefine()
 
         self._DecreaseIndentation()
         self._LayoutStructTail()
@@ -144,73 +166,35 @@ class SheetInterpreter:
         self._Write2File()
 
         LogHelp.close()
+
         # 将PB转换成py格式
         try :
-            command = "protoc --python_out=. " + self._pb_file_name
+            command = PROTOC_BIN + " --python_out=./ " + PROTO_OUTPUT_PATH + self._pb_file_name
             os.system(command)
         except BaseException, e :
             print "protoc failed!"
             raise
 
-    def _FieldDefine(self, repeated_num) :
-        LOG_INFO("row=%d, col=%d, repeated_num=%d", self._row, self._col, repeated_num)
-        field_rule = str(self._sheet.cell_value(FIELD_RULE_ROW, self._col))
+    def _FieldDefine(self) :
+        field = FieldItem()
+        field.rule = str(self._sheet.cell_value(FIELD_RULE_ROW, self._col))
+        field.typename = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
+        field.name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
+        field.comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).encode("utf-8")
 
-        if field_rule == "required" or field_rule == "optional" :
-            field_type = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
-            field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-            field_comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col))
+        LOG_INFO("row=%d, col=%d|%s|%s|%s|%s", self._row, self._col,field.rule, field.typename, field.name, field.comment)
 
-            LOG_INFO("%s|%s|%s|%s", field_rule, field_type, field_name, field_comment)
+        if field.rule in ["required", "optional", "repeated"] :
+            self._LayoutComment(field.comment)
+            self._LayoutOneField(field.rule, field.typename, field.name)
+            self._col += 1
 
-            comment = field_comment.encode("utf-8")
-            self._LayoutComment(comment)
+        elif field.rule == "struct":
+            field_num = int(str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).split('*')[0])
+            repeated_num = int(str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).split('*')[1])
+            struct_name = "InternalType_" + field.name;
 
-            if repeated_num >= 1:
-                field_rule = "repeated"
-
-            self._LayoutOneField(field_rule, field_type, field_name)
-
-            actual_repeated_num = 1 if (repeated_num == 0) else repeated_num
-            self._col += actual_repeated_num
-
-        elif field_rule == "repeated" :
-            # 2011-11-29 修改
-            # 若repeated第二行是类型定义，则表示当前字段是repeated，并且数据在单列用分好相隔
-            second_row = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
-            LOG_DEBUG("repeated|%s", second_row);
-            # exel有可能有小数点
-            if second_row.isdigit() or second_row.find(".") != -1 :
-                # 这里后面一般会是一个结构体
-                repeated_num = int(float(second_row))
-                LOG_INFO("%s|%d", field_rule, repeated_num)
-                self._col += 1
-                self._FieldDefine(repeated_num)
-            else :
-                # 一般是简单的单字段，数值用分号相隔
-                field_type = second_row
-                field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-                field_comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col))
-                LOG_INFO("%s|%s|%s|%s", field_rule, field_type, field_name, field_comment)
-
-                comment = field_comment.encode("utf-8")
-                self._LayoutComment(comment)
-
-                self._LayoutOneField(field_rule, field_type, field_name)
-
-                self._col += 1
-
-        elif "struct" in field_rule :
-            field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col))
-            # struct_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-            # field_name = str(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).strip()
-            field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-            struct_name = "InternalType_" + field_name;
-            field_comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col))
-            comment = field_comment.encode("utf-8")
-
-            LOG_INFO("%s|%d|%s|%s", field_rule, field_num, struct_name, field_name)
-
+            LOG_INFO("%s|%d|%s|%s", field.rule, field_num, struct_name, field.name)
 
             if (self._IsStructDefined(struct_name)) :
                 self._is_layout = False
@@ -219,45 +203,33 @@ class SheetInterpreter:
                 self._is_layout = True
 
             self._col += 1
+
             col_begin = self._col
-            self._StructDefine(struct_name, field_num, comment)
+            self._StructDefine(struct_name, field_num, field.comment)
             col_end = self._col
 
-            self._is_layout = True
+            field.rule = "optional" if repeated_num <= 1 else "repeated"
+            self._LayoutOneField(field.rule, struct_name, field.name)
 
-            if repeated_num >= 1:
-                field_rule = "repeated"
-            #  elif field_rule == "required_struct":
-            #      field_rule = "required"
-            else:
-                field_rule = "optional"
+            self._col += (repeated_num-1) * (col_end-col_begin)
 
-            self._LayoutOneField(field_rule, struct_name, field_name)
-
-            actual_repeated_num = 1 if (repeated_num == 0) else repeated_num
-            self._col += (actual_repeated_num-1) * (col_end-col_begin)
         else :
             self._col += 1
             return
 
     def _IsStructDefined(self, struct_name) :
-        for name in self._struct_name_list :
-            if name == struct_name :
-                return True
-        return False
+        return struct_name in self._struct_name_list
 
     def _StructDefine(self, struct_name, field_num, comment) :
         """嵌套结构定义"""
 
-        # self._col += 1
         self._LayoutComment(comment)
         self._LayoutStructHead(struct_name)
         self._IncreaseIndentation()
         self._field_index_list.append(1)
 
-        while field_num > 0 :
-            self._FieldDefine(0)
-            field_num -= 1
+        for i in range(field_num) :
+            self._FieldDefine()
 
         self._field_index_list.pop()
         self._DecreaseIndentation()
@@ -369,28 +341,18 @@ class SheetInterpreter:
 
     def _Write2File(self) :
         """输出到文件"""
-        pb_file = open(self._pb_file_name, "w+")
+        file_path = PROTO_OUTPUT_PATH + self._pb_file_name
+        #  os.makedirs(PROTO_OUTPUT_PATH)
+        pb_file = open(file_path, "w+")
         pb_file.writelines(self._output)
         pb_file.close()
 
-
 class DataParser:
     """解析excel的数据"""
-    def __init__(self, xls_file_path, sheet_name):
+    def __init__(self, xls_file_path, sheet):
         self._xls_file_path = xls_file_path
-        self._sheet_name = sheet_name
-
-        try :
-            self._workbook = xlrd.open_workbook(self._xls_file_path)
-        except BaseException, e :
-            print "open xls file(%s) failed!"%(self._xls_file_path)
-            raise
-
-        try :
-            self._sheet =self._workbook.sheet_by_name(self._sheet_name)
-        except BaseException, e :
-            print "open sheet(%s) failed!"%(self._sheet_name)
-            raise
+        self._sheet = sheet
+        self._sheet_name = self._sheet.name
 
         self._row_count = len(self._sheet.col_values(0))
         self._col_count = len(self._sheet.row_values(0))
@@ -415,14 +377,14 @@ class DataParser:
 
         # 先找到定义ID的列
         id_col = 0
-        for id_col in range(0, self._col_count) :
+        for id_col in range(self._col_count) :
             info_id = str(self._sheet.cell_value(self._row, id_col)).strip()
             if info_id == "" :
                 continue
             else :
                 break
 
-        for self._row in range(4, self._row_count) :
+        for self._row in range(DATA_BEGIN_ROW, self._row_count) :
             # 如果 id 是 空 直接跳过改行
             info_id = str(self._sheet.cell_value(self._row, id_col)).strip()
             if info_id == "" :
@@ -438,8 +400,6 @@ class DataParser:
         data = item_array.SerializeToString()
         self._WriteData2File(data)
 
-
-        #comment this line for test .by kevin at 2013年1月12日 17:23:35
         LogHelp.close()
 
     def _ParseLine(self, item) :
@@ -447,102 +407,59 @@ class DataParser:
 
         self._col = 0
         while self._col < self._col_count :
-            self._ParseField(0, 0, item)
+            self._ParseField(item)
 
-    def _ParseField(self, max_repeated_num, repeated_num, item) :
-        field_rule = str(self._sheet.cell_value(0, self._col)).strip()
+    def _ParseField(self, item) :
+        field_rule = str(self._sheet.cell_value(FIELD_RULE_ROW, self._col)).strip()
 
         if field_rule == "required" or field_rule == "optional" :
-            field_name = str(self._sheet.cell_value(2, self._col)).strip()
+            field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
             if field_name.find('=') > 0 :
                 name_and_value = field_name.split('=')
                 field_name = str(name_and_value[0]).strip()
-            field_type = str(self._sheet.cell_value(1, self._col)).strip()
+            field_type = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
 
             LOG_INFO("%d|%d", self._row, self._col)
             LOG_INFO("%s|%s|%s", field_rule, field_type, field_name)
 
-            if max_repeated_num == 0 :
-                field_value = self._GetFieldValue(field_type, self._row, self._col)
-                # 有value才设值
-                if field_value != None :
-                    item.__setattr__(field_name, field_value)
-                self._col += 1
-            else :
-                if repeated_num == 0 :
-                    if field_rule == "required" :
-                        print "required but repeated_num = 0"
-                        raise
-                else :
-                    for col in range(self._col, self._col + repeated_num):
-                        field_value = self._GetFieldValue(field_type, self._row, col)
-                        # 有value才设值
-                        if field_value != None :
-                            item.__getattribute__(field_name).append(field_value)
-                self._col += max_repeated_num
+            field_value = self._GetFieldValue(field_type, self._row, self._col)
+            # 有value才设值
+            if field_value != None :
+                item.__setattr__(field_name, field_value)
+            self._col += 1
 
         elif field_rule == "repeated" :
-            # 2011-11-29 修改
-            # 若repeated第二行是类型定义，则表示当前字段是repeated，并且数据在单列用分好相隔
             second_row = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
             LOG_DEBUG("repeated|%s", second_row);
-            # exel有可能有小数点
-            if second_row.isdigit() or second_row.find(".") != -1 :
-                # 这里后面一般会是一个结构体
-                max_repeated_num = int(float(second_row))
-                read = self._sheet.cell_value(self._row, self._col)
-                repeated_num = 0 if read == "" else int(self._sheet.cell_value(self._row, self._col))
+            # 一般是简单的单字段，数值用分号相隔
+            # 一般也只能是数字类型
+            field_type = second_row
+            field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
+            field_value_str = unicode(self._sheet.cell_value(self._row, self._col))
+            #增加长度判断
+            if len(field_value_str) > 0:
+                if field_value_str.find(";\n") > 0 :
+                    field_value_list = field_value_str.split(";\n")
+                else :
+                    field_value_list = field_value_str.split(";")
 
-                LOG_INFO("%s|%d|%d", field_rule, max_repeated_num, repeated_num)
+                for field_value in field_value_list :
+                    if len(field_value_str) <= 0:
+                        break;
 
-                if max_repeated_num == 0 :
-                    print "max repeated num shouldn't be 0"
-                    raise
+                    if field_type == "bytes" or field_type == "string" :
+                        item.__getattribute__(field_name).append(field_value.encode("utf8"))
+                    elif field_type == "double" or field_type == "float" :
+                        item.__getattribute__(field_name).append(float(field_value))
+                    else:
+                        item.__getattribute__(field_name).append(int(float(field_value)))
 
-                if repeated_num > max_repeated_num :
-                    repeated_num = max_repeated_num
-
-                self._col += 1
-                self._ParseField(max_repeated_num, repeated_num, item)
-
-            else :
-                # 一般是简单的单字段，数值用分号相隔
-                # 一般也只能是数字类型
-                field_type = second_row
-                field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-                field_value_str = unicode(self._sheet.cell_value(self._row, self._col))
-                #field_value_str = unicode(self._sheet.cell_value(self._row, self._col)).strip()
-
-                # LOG_INFO("%d|%d|%s|%s|%s",
-                #         self._row, self._col, field_rule, field_type, field_name, field_value_str)
-
-                #2013-01-24 jamey
-                #增加长度判断
-                if len(field_value_str) > 0:
-                    if field_value_str.find(";\n") > 0 :
-                        field_value_list = field_value_str.split(";\n")
-                    else :
-                        field_value_list = field_value_str.split(";")
-
-                    for field_value in field_value_list :
-                        if len(field_value_str) <= 0:
-                            break;
-
-                        if field_type == "bytes" or field_type == "string" :
-                            item.__getattribute__(field_name).append(field_value.encode("utf8"))
-                        elif field_type == "double" or field_type == "float" :
-                            item.__getattribute__(field_name).append(float(field_value))
-                        else:
-                            item.__getattribute__(field_name).append(int(float(field_value)))
-
-                self._col += 1
+            self._col += 1
 
         elif "struct" in field_rule :
-            field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col))
-            #
-            field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col))
-            # struct_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-            # field_name = str(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).strip()
+            field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col).split('*')[0])
+            repeated_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col).split('*')[1])
+
             field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
             struct_name = "InternalType_" + field_name;
 
@@ -550,38 +467,18 @@ class DataParser:
 
 
             self._col += 1
-            col_begin = self._col
 
             # 至少循环一次
-            if max_repeated_num == 0 :
+            if repeated_num <= 1 :
                 struct_item = item.__getattribute__(field_name)
                 self._ParseStruct(field_num, struct_item)
-
             else :
-                if repeated_num == 0 :
-                    #  if field_rule == "required_struct" :
-                    #      print "required but repeated_num = 0"
-                    #      raise
-                    # 先读取再删除掉
+                for i in range(repeated_num):
                     struct_item = item.__getattribute__(field_name).add()
                     self._ParseStruct(field_num, struct_item)
-                    item.__getattribute__(field_name).__delitem__(-1)
-
-                else :
-                    for num in range(0, repeated_num):
-                        struct_item = item.__getattribute__(field_name).add()
-                        self._ParseStruct(field_num, struct_item)
-                        if len(struct_item.ListFields()) == 0 :
-                            #print "not set"
-                            item.__getattribute__(field_name).__delitem__(-1)
-
-
-            col_end = self._col
-
-            max_repeated_num = 1 if (max_repeated_num == 0) else max_repeated_num
-            actual_repeated_num = 1 if (repeated_num==0) else repeated_num
-            self._col += (max_repeated_num - actual_repeated_num) * ((col_end-col_begin)/actual_repeated_num)
-
+                    if len(struct_item.ListFields()) == 0 :
+                        # 空数据就不用加了
+                        item.__getattribute__(field_name).__delitem__(-1)
         else :
             self._col += 1
             return
@@ -590,10 +487,8 @@ class DataParser:
         """嵌套结构数据读取"""
 
         # 跳过结构体定义
-        # self._col += 1
-        while field_num > 0 :
-            self._ParseField(0, 0, struct_item)
-            field_num -= 1
+        for i in range(field_num) :
+            self._ParseField(struct_item)
 
     def _GetFieldValue(self, field_type, row, col) :
         """将pb类型转换为python类型"""
@@ -674,9 +569,11 @@ class DataParser:
         file.write(data)
         file.close()
 
+
+###############################################################################
 def ProcessOneFile(xls_file_path, op) :
     if not ".xls" in xls_file_path :
-        print "Skip %s" %(xls_file_path)
+        #  print "Skip %s" %(xls_file_path)
         return
 
     try :
@@ -688,33 +585,37 @@ def ProcessOneFile(xls_file_path, op) :
     sheet_name_list = workbook.sheet_names()
 
     for sheet_name in sheet_name_list :
-        #  if sheet_name[0] == '#':
-        #      continue
         if (not sheet_name.isupper()):
             print "Skip %s" %(sheet_name)
             continue
 
-        if op == 0 or op == 1:
-            try :
-                interpreter = SheetInterpreter(xls_file_path, sheet_name)
-                interpreter.Interpreter()
-            except BaseException, e :
-                print Color.RED + "Interpreter %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
-                print Color.YELLOW, "row: ", interpreter._row + 1, "col: ", interpreter._col + 1, "ERROR: ", e, Color.NONE
-                sys.exit(-3)
+        try :
+            sheet = workbook.sheet_by_name(sheet_name)
+        except BaseException, e :
+            print Color.YELLOW, e, Color.NONE
+            break
 
-            print Color.GREEN + "Interpreter %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
+        try :
+            interpreter = SheetInterpreter(xls_file_path, sheet)
+            interpreter.Interpreter()
+        except BaseException, e :
+            print Color.RED + "Interpreter %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
+            print Color.YELLOW, "row: ", interpreter._row + 1, "col: ", interpreter._col + 1, "ERROR: ", e, Color.NONE
+            break
 
-        if op == 0 or op == 2:
-            try :
-                parser = DataParser(xls_file_path, sheet_name)
-                parser.Parse()
-            except BaseException, e :
-                print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
-                print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
-                sys.exit(-4)
+        print Color.GREEN + "Interpreter %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
-            print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
+        try :
+            parser = DataParser(xls_file_path, sheet)
+            parser.Parse()
+        except BaseException, e :
+            print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
+            print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
+            break
+
+        print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
+
+    workbook.release_resources()
 
 def ProcessPath(file_path, op) :
     if os.path.isfile(file_path) :
@@ -725,11 +626,34 @@ def ProcessPath(file_path, op) :
             real_file_path = file_path+"/"+path
             ProcessPath(real_file_path, op)
 
+def usage():
+    print '''
+    Usage: %s EXCEL_FILE [OPTIONS]
+    ''' %(sys.argv[0])
+
 
 if __name__ == '__main__' :
     if len(sys.argv) < 2 :
-        print "Usage: %s xls_file" %(sys.argv[0])
+        Usage()
         sys.exit(-1)
+
+    #  try:
+    #      opt, args = getopt.getopt(sys.argv[3:], "hr:s:o:", ["help", "repeated=", "subkey=", "output="])
+    #  except getopt.GetoptError, err:
+    #      print "err:",(err)
+    #      usage()
+    #      sys.exit(-1)
+
+    #  for op, value in opt:
+    #      if op == "-h" :
+    #          usage()
+    #      elif op == "-r" or op == "--repeated":
+    #          have_repeated_key = int(value)
+    #      elif op == "-s" or op == "--subkey":
+    #          sub_key_col = int(value)
+    #      elif op == "-o" or op == "--output":
+    #          output = value
+
 
     # option 0 生成proto和data; 1 只生成proto; 2 只生成data
     op = 0
