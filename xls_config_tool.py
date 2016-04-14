@@ -9,6 +9,7 @@
 import xlrd # for read excel
 import sys
 import os
+import commands
 
 reload(sys)
 sys.setdefaultencoding( "utf-8" )
@@ -25,16 +26,16 @@ DATA_BEGIN_ROW = 4
 
 PROTOC_BIN = "protoc "
 
-OUTPUT_PATH = "" #output/"
-PROTO_OUTPUT_PATH = ""#OUTPUT_PATH + "proto/"
-BYTES_OUTPUT_PATH = ""#OUTPUT_PATH + "bytes/"
-JSON_OUTPUT_PATH = ""#OUTPUT_PATH + "json/"
-LUA_OUTPUT_PATH = ""#OUTPUT_PATH + "lua/"
+OUTPUT_PATH = "output/"
+PROTO_OUTPUT_PATH = OUTPUT_PATH + "proto/"
+BYTES_OUTPUT_PATH = OUTPUT_PATH + "bytes/"
+JSON_OUTPUT_PATH = OUTPUT_PATH + "json/"
+LUA_OUTPUT_PATH = OUTPUT_PATH + "lua/"
 
 CPP_OUTPUT_PATH = ""#PROTO_OUTPUT_PATH + "cpp/"
 PYTHON_OUTPUT_PATH = ""#PROTO_OUTPUT_PATH + "python/"
 
-OUTPUT_FULE_PATH_BASE = "xlsc_"
+OUTPUT_FILE_PREFIX = "xlsc_"
 
 DIGITAL_TYPES = ["int32", "int64", "uint32", "uint64", "double", "float"]
 
@@ -96,6 +97,7 @@ LOG_DEBUG=LogHelp.get_logger().debug
 LOG_INFO=LogHelp.get_logger().info
 LOG_WARN=LogHelp.get_logger().warn
 LOG_ERROR=LogHelp.get_logger().error
+
 ###############################################################################
 
 class StuctItem:
@@ -113,6 +115,8 @@ class FieldItem:
         self.default_value = ""
         self.group = None
         self.struct = None
+
+###############################################################################
 
 class SheetInterpreter:
     """通过excel配置生成配置的protobuf定义文件"""
@@ -140,7 +144,7 @@ class SheetInterpreter:
         # 保存所有结构的名字
         self._struct_name_list = []
 
-        self._pb_file_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + ".proto"
+        self._pb_file_name = PROTO_OUTPUT_PATH + OUTPUT_FILE_PREFIX + self._sheet_name.lower() + ".proto"
 
 
     def Interpreter(self) :
@@ -169,7 +173,7 @@ class SheetInterpreter:
 
         # 将PB转换成py格式
         try :
-            command = PROTOC_BIN + " --python_out=./ " + PROTO_OUTPUT_PATH + self._pb_file_name
+            command = PROTOC_BIN + " --python_out=./ " + self._pb_file_name
             os.system(command)
         except BaseException, e :
             print "protoc failed!"
@@ -341,11 +345,12 @@ class SheetInterpreter:
 
     def _Write2File(self) :
         """输出到文件"""
-        file_path = PROTO_OUTPUT_PATH + self._pb_file_name
-        #  os.makedirs(PROTO_OUTPUT_PATH)
-        pb_file = open(file_path, "w+")
+        if not os.path.exists(PROTO_OUTPUT_PATH) : os.makedirs(PROTO_OUTPUT_PATH)
+        pb_file = open(self._pb_file_name, "w+")
         pb_file.writelines(self._output)
         pb_file.close()
+
+###############################################################################
 
 class DataParser:
     """解析excel的数据"""
@@ -360,9 +365,11 @@ class DataParser:
         self._row = 0
         self._col = 0
 
+        self._data_file_name = BYTES_OUTPUT_PATH + OUTPUT_FILE_PREFIX + self._sheet_name.lower() + ".bytes"
+
         try:
-            self._module_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + "_pb2"
-            sys.path.append(os.getcwd())
+            self._module_name = OUTPUT_FILE_PREFIX + self._sheet_name.lower() + "_pb2"
+            sys.path.append(PROTO_OUTPUT_PATH)
             exec('from '+self._module_name + ' import *');
             self._module = sys.modules[self._module_name]
         except BaseException, e :
@@ -558,19 +565,147 @@ class DataParser:
             raise
 
     def _WriteData2File(self, data) :
-        self._data_file_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + ".data"
+        if not os.path.exists(BYTES_OUTPUT_PATH) : os.makedirs(BYTES_OUTPUT_PATH)
         file = open(self._data_file_name, 'wb+')
         file.write(data)
         file.close()
 
     def _WriteReadableData2File(self, data) :
-        file_name = OUTPUT_FULE_PATH_BASE + self._sheet_name.lower() + ".txt"
+        if not os.path.exists(JSON_OUTPUT_PATH) : os.makedirs(JSON_OUTPUT_PATH)
+        file_name = JSON_OUTPUT_PATH + OUTPUT_FILE_PREFIX  + self._sheet_name.lower() + ".json"
         file = open(file_name, 'wb+')
         file.write(data)
         file.close()
 
+###############################################################################
+
+class LuaParser:
+    """excel to lua"""
+    def __init__(self, xls_file_path, sheet):
+        self._xls_file_path = xls_file_path
+        self._sheet = sheet
+        self._sheet_name = self._sheet.name
+
+        self._row_count = len(self._sheet.col_values(0))
+        self._col_count = len(self._sheet.row_values(0))
+
+        self._row = 0
+        self._col = 0
+
+        self.dic = {}
+
+        self.all_str = ""
+        self.row_str = ""
+
+
+        self._data_file_name = LUA_OUTPUT_PATH + OUTPUT_FILE_PREFIX + self._sheet_name.lower() + ".lua"
+
+    def Parse(self) :
+        self.all_str = self._sheet.name + "={\n"
+        for self._row in range(DATA_BEGIN_ROW, self._row_count) :
+            self._ParseLine()
+            self.all_str += self.row_str + ",\n"
+
+        self.all_str += "}"
+
+        self._WriteData2File(self.all_str)
+        self._CheckLua()
+
+    def _ParseLine(self) :
+        self._col = 0
+        self.row_str = "\t{"
+        while self._col < self._col_count :
+            self._ParseField()
+
+        self.row_str += "}"
+        #  print self.row_str
+
+    def _ParseField(self) :
+        dict_item = {}
+        #创建对象。方便后面访问
+        field = FieldItem()
+        field.rule = str(self._sheet.cell_value(FIELD_RULE_ROW, self._col)).strip()
+        if ('=' in field.rule) :
+            tmp_list = field.rule.split('=')
+            field.rule = tmp_list[0]
+            field.group = tmp_list[1]
+
+        field.typename = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
+        field.name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip().strip()
+        if ('=' in field.name) :
+            tmp_list = field.name.split('=')
+            field.name = tmp_list[0]
+            field.default_value = tmp_list[1]
+
+        field.comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).encode("utf-8")
+
+        field.value = self._sheet.cell_value(self._row, self._col)
+
+
+        if field.rule in ["required", "optional"] :
+            if field.value != None :
+                #  dict_item[field.name] = field.value
+                self.row_str += field.name + '=\"' + str(field.value) + '\", '
+
+            self._col += 1
+        elif field.rule == "repeated" :
+            field_value_str = unicode(self._sheet.cell_value(self._row, self._col))
+            field_value_list = []
+            #增加长度判断
+            if len(field_value_str) > 0:
+                if field_value_str.find(";\n") > 0 :
+                    field_value_list = field_value_str.split(";\n")
+                else :
+                    field_value_list = field_value_str.split(";")
+
+            dict_item[field.name] = field_value_list
+            self._col += 1
+            self.row_str += field.name + '=\"' + field.value + '\", '
+
+        elif "struct" in field.rule :
+            field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col).split('*')[0])
+            repeated_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col).split('*')[1])
+
+            field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
+
+            self._col += 1
+
+            self.row_str += field_name + "={"
+            # 至少循环一次
+            if repeated_num <= 1 :
+                self._ParseStruct(field_num)
+            else :
+                for i in range(repeated_num):
+                    self._ParseStruct(field_num)
+            self.row_str += "}, "
+        else :
+            self._col += 1
+            return
+
+    def _ParseStruct(self, field_num) :
+        """嵌套结构数据读取"""
+
+        # 跳过结构体定义
+        self.row_str += "{"
+        for i in range(field_num) :
+            self._ParseField()
+        self.row_str += "}, "
+
+    def _WriteData2File(self, data) :
+        if not os.path.exists(LUA_OUTPUT_PATH) : os.makedirs(LUA_OUTPUT_PATH)
+        file = open(self._data_file_name, 'wb+')
+        file.write(data)
+        file.close()
+
+    def _CheckLua(self) :
+        command = "lua " + self._data_file_name
+        status, output = commands.getstatusoutput(command)
+        if (status != 0) :
+            print Color.RED + "[ERROR]: Test " + lua_file_name + "  FAILED!" + Color.NONE
+            raise
 
 ###############################################################################
+
 def ProcessOneFile(xls_file_path, op) :
     if not ".xls" in xls_file_path :
         #  print "Skip %s" %(xls_file_path)
@@ -602,7 +737,6 @@ def ProcessOneFile(xls_file_path, op) :
             print Color.RED + "Interpreter %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
             print Color.YELLOW, "row: ", interpreter._row + 1, "col: ", interpreter._col + 1, "ERROR: ", e, Color.NONE
             break
-
         print Color.GREEN + "Interpreter %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
         try :
@@ -612,7 +746,15 @@ def ProcessOneFile(xls_file_path, op) :
             print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
             print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
             break
+        print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
+        try :
+            parser = LuaParser(xls_file_path, sheet)
+            parser.Parse()
+        except BaseException, e :
+            print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
+            print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
+            break
         print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
     workbook.release_resources()
