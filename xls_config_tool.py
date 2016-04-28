@@ -10,6 +10,7 @@ import xlrd # for read excel
 import sys
 import os
 import commands
+import getopt
 
 reload(sys)
 sys.setdefaultencoding( "utf-8" )
@@ -37,7 +38,8 @@ PYTHON_OUTPUT_PATH = ""#PROTO_OUTPUT_PATH + "python/"
 
 OUTPUT_FILE_PREFIX = "xlsc_"
 
-DIGITAL_TYPES = ["int32", "int64", "uint32", "uint64", "double", "float"]
+INTEGER_TYPES = ["int32", "int64", "uint32", "uint64"]
+FRACTION_TYPES = ["float", "double"]
 
 ###############################################################################
 # 日志相关
@@ -98,6 +100,39 @@ LOG_INFO=LogHelp.get_logger().info
 LOG_WARN=LogHelp.get_logger().warn
 LOG_ERROR=LogHelp.get_logger().error
 
+
+###############################################################################
+def GetValue(typename, value_str) :
+    #  print typename, value_str
+    if len(str(value_str).strip()) <=0 :
+        return None
+
+    if typename in INTEGER_TYPES :
+        return int(value_str)
+    elif typename in FRACTION_TYPES :
+        return float(value_str)
+    elif typename == "DateTime" :
+        typename = unicode(value_str).encode('utf-8')
+        import time
+        time_struct = time.strptime(value_str, "%Y-%m-%d %H:%M:%S")
+        #  #GMT time
+        timt_stamp = int(time.mktime(time_struct) - time.timezone)
+        return timt_stamp
+    elif typename == "TimeDuration" :
+        field_value = unicode(value_str).encode('utf-8')
+        import datetime
+        import time
+        time_struct=0
+        try :
+            time_struct = time.strptime(value_str, "%HH")
+        except BaseException, e :
+            time_struct = time.strptime(value_str, "%jD%HH")
+        return 3600 * (time_struct.tm_yday * 24 + time_struct.tm_hour)
+    elif typename == "bool" :
+        return (True if int(value_str) != 0 else False)
+    else :
+        return str(value_str)
+
 ###############################################################################
 
 class StuctItem:
@@ -112,9 +147,13 @@ class FieldItem:
         self.typename = ""
         self.name = ""
         self.comment = ""
-        self.default_value = ""
+        self.value_str = ""
+        self.default_value_str = ""
+
+        self.default_value = None
         self.group = None
         self.struct = None
+        self.value = None
 
 ###############################################################################
 
@@ -503,66 +542,68 @@ class DataParser:
         field_value = self._sheet.cell_value(row, col)
         LOG_INFO("%d|%d|%s", row, col, field_value)
 
-        try:
-            if field_type == "bool" :
-                if len(str(field_value).strip()) <=0 :
-                    return False
-                else :
-                    return (True if int(field_value) != 0 else False)
-            elif field_type == "int32" or field_type == "int64"\
-                    or  field_type == "uint32" or field_type == "uint64"\
-                    or field_type == "sint32" or field_type == "sint64"\
-                    or field_type == "fixed32" or field_type == "fixed64"\
-                    or field_type == "sfixed32" or field_type == "sfixed64" :
-                        if len(str(field_value).strip()) <=0 :
-                            return None
-                        else :
-                            return int(field_value)
-            elif field_type == "double" or field_type == "float" :
-                    if len(str(field_value).strip()) <=0 :
-                        return None
-                    else :
-                        return float(field_value)
-            elif field_type == "string" :
-                field_value = unicode(field_value)
-                if len(field_value) <= 0 :
-                    return None
-                else :
-                    return field_value
-            elif field_type == "bytes" :
-                field_value = unicode(field_value).encode('utf-8')
-                if len(field_value) <= 0 :
-                    return None
-                else :
-                    return field_value
-            elif field_type == "DateTime" :
-                field_value = unicode(field_value).encode('utf-8')
-                if len(field_value) <= 0 :
-                    return 0
-                else :
-                    import time
-                    time_struct = time.strptime(field_value, "%Y-%m-%d %H:%M:%S")
-                    #GMT time
-                    timt_stamp = int(time.mktime(time_struct) - time.timezone)
-                    return timt_stamp
-            elif field_type == "TimeDuration" :
-                field_value = unicode(field_value).encode('utf-8')
-                if len(field_value) <= 0 :
-                    return 0
-                else :
-                    import datetime
-                    import time
-                    time_struct=0
-                    try :
-                        time_struct = time.strptime(field_value, "%HH")
-                    except BaseException, e :
-                        time_struct = time.strptime(field_value, "%jD%HH")
-                    return 3600 * (time_struct.tm_yday * 24 + time_struct.tm_hour)
-            else :
-                return None
-        except BaseException, e :
-            print "parse cell(%u, %u) error, please check it, maybe type is wrong."%(row, col)
-            raise
+        return GetValue(field_type, field_value)
+
+        #  try:
+        #      if field_type == "bool" :
+        #          if len(str(field_value).strip()) <=0 :
+        #              return False
+        #          else :
+        #              return (True if int(field_value) != 0 else False)
+        #      elif field_type == "int32" or field_type == "int64"\
+        #              or  field_type == "uint32" or field_type == "uint64"\
+        #              or field_type == "sint32" or field_type == "sint64"\
+        #              or field_type == "fixed32" or field_type == "fixed64"\
+        #              or field_type == "sfixed32" or field_type == "sfixed64" :
+        #                  if len(str(field_value).strip()) <=0 :
+        #                      return None
+        #                  else :
+        #                      return int(field_value)
+        #      elif field_type == "double" or field_type == "float" :
+        #              if len(str(field_value).strip()) <=0 :
+        #                  return None
+        #              else :
+        #                  return float(field_value)
+        #      elif field_type == "string" :
+        #          field_value = unicode(field_value)
+        #          if len(field_value) <= 0 :
+        #              return None
+        #          else :
+        #              return field_value
+        #      elif field_type == "bytes" :
+        #          field_value = unicode(field_value).encode('utf-8')
+        #          if len(field_value) <= 0 :
+        #              return None
+        #          else :
+        #              return field_value
+        #      elif field_type == "DateTime" :
+        #          field_value = unicode(field_value).encode('utf-8')
+        #          if len(field_value) <= 0 :
+        #              return 0
+        #          else :
+        #              import time
+        #              time_struct = time.strptime(field_value, "%Y-%m-%d %H:%M:%S")
+        #              #GMT time
+        #              timt_stamp = int(time.mktime(time_struct) - time.timezone)
+        #              return timt_stamp
+        #      elif field_type == "TimeDuration" :
+        #          field_value = unicode(field_value).encode('utf-8')
+        #          if len(field_value) <= 0 :
+        #              return 0
+        #          else :
+        #              import datetime
+        #              import time
+        #              time_struct=0
+        #              try :
+        #                  time_struct = time.strptime(field_value, "%HH")
+        #              except BaseException, e :
+        #                  time_struct = time.strptime(field_value, "%jD%HH")
+        #              return 3600 * (time_struct.tm_yday * 24 + time_struct.tm_hour)
+        #      else :
+        #          return None
+        #  except BaseException, e :
+        #      print "parse cell(%u, %u) error, please check it, maybe type is wrong."%(row, col)
+        #      raise
 
     def _WriteData2File(self, data) :
         if not os.path.exists(BYTES_OUTPUT_PATH) : os.makedirs(BYTES_OUTPUT_PATH)
@@ -592,7 +633,7 @@ class LuaParser:
         self._row = 0
         self._col = 0
 
-        self.dic = {}
+        self.row_key = {}
 
         self.all_str = ""
         self.row_str = ""
@@ -613,11 +654,25 @@ class LuaParser:
 
     def _ParseLine(self) :
         self._col = 0
+        self.row_key = {}
         self.row_str = "\t{"
         while self._col < self._col_count :
             self._ParseField()
 
         self.row_str += "}"
+
+        key_str = ""
+        if (len(self.row_key)) > 1 :
+            key_str = "\""
+            for key in self.row_key.values() :
+                key_str += str(key)
+            key_str += "\""
+        elif (len(self.row_key)) == 1 :
+            key_str += str(self.row_key.values()[0])
+
+        if len(key_str) > 0 :
+            self.row_str = "[" + key_str + "]=" + self.row_str
+
         #  print self.row_str
 
     def _ParseField(self) :
@@ -635,37 +690,49 @@ class LuaParser:
         if ('=' in field.name) :
             tmp_list = field.name.split('=')
             field.name = tmp_list[0]
-            field.default_value = tmp_list[1]
+            field.default_value_str = tmp_list[1]
+            field.default_value = GetValue(field.typename, field.default_value_str)
 
         field.comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).encode("utf-8")
+        field.value_str = self._sheet.cell_value(self._row, self._col)
 
-        field.value = self._sheet.cell_value(self._row, self._col)
+        #  if len(str(field.value_str).strip()) <=0 :
+        #      self._col += 1
+        #      return
 
+        if field.rule == "key" :
+            field.value = GetValue(field.typename, field.value_str)
+            self.row_key[field.name] = field.value
 
-        if field.rule in ["required", "optional"] :
+        if field.rule in ["key", "required", "optional"] :
+            field.value = GetValue(field.typename, field.value_str)
             if field.value != None :
-                #  dict_item[field.name] = field.value
-                self.row_str += field.name + '=\"' + str(field.value) + '\", '
+                self.row_str += field.name + ' = \"' + str(field.value) + '\", '
+            elif field.default_value != None :
+                self.row_str += field.name + ' = \"' + str(field.default_value) + '\", '
 
             self._col += 1
+
         elif field.rule == "repeated" :
             field_value_str = unicode(self._sheet.cell_value(self._row, self._col))
             field_value_list = []
-            #增加长度判断
             if len(field_value_str) > 0:
                 if field_value_str.find(";\n") > 0 :
                     field_value_list = field_value_str.split(";\n")
                 else :
                     field_value_list = field_value_str.split(";")
+                [GetValue(field.typename, e) for e in field_value_list]
 
-            dict_item[field.name] = field_value_list
+                self.row_str += field.name + '= {'
+                for v in field_value_list :
+                    self.row_str += '\"' + str(v) + '\", '
+                self.row_str += '},'
+
             self._col += 1
-            self.row_str += field.name + '=\"' + field.value + '\", '
 
-        elif "struct" in field.rule :
+        elif field.rule == "struct":
             field_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col).split('*')[0])
             repeated_num = int(self._sheet.cell_value(FIELD_TYPE_ROW, self._col).split('*')[1])
-
             field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
 
             self._col += 1
@@ -730,31 +797,16 @@ def ProcessOneFile(xls_file_path, op) :
             print Color.YELLOW, e, Color.NONE
             break
 
-        try :
-            interpreter = SheetInterpreter(xls_file_path, sheet)
-            interpreter.Interpreter()
-        except BaseException, e :
-            print Color.RED + "Interpreter %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
-            print Color.YELLOW, "row: ", interpreter._row + 1, "col: ", interpreter._col + 1, "ERROR: ", e, Color.NONE
-            break
+        interpreter = SheetInterpreter(xls_file_path, sheet)
+        interpreter.Interpreter()
         print Color.GREEN + "Interpreter %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
-        try :
-            parser = DataParser(xls_file_path, sheet)
-            parser.Parse()
-        except BaseException, e :
-            print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
-            print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
-            break
+        parser = DataParser(xls_file_path, sheet)
+        parser.Parse()
         print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
-        try :
-            parser = LuaParser(xls_file_path, sheet)
-            parser.Parse()
-        except BaseException, e :
-            print Color.RED + "Parse %s of %s Failed!!!" %(sheet_name, xls_file_path) + Color.NONE
-            print Color.YELLOW, "row: ", parser._row + 1, "col: ", parser._col + 1, "ERROR: ", e, Color.NONE
-            break
+        parser = LuaParser(xls_file_path, sheet)
+        parser.Parse()
         print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
     workbook.release_resources()
@@ -779,30 +831,25 @@ if __name__ == '__main__' :
         Usage()
         sys.exit(-1)
 
-    #  try:
-    #      opt, args = getopt.getopt(sys.argv[3:], "hr:s:o:", ["help", "repeated=", "subkey=", "output="])
-    #  except getopt.GetoptError, err:
-    #      print "err:",(err)
-    #      usage()
-    #      sys.exit(-1)
+    try:
+        opt, args = getopt.getopt(sys.argv[3:], "ho:g", ["help", "output=", "group="])
+    except getopt.GetoptError, err:
+        print "err:",(err)
+        usage()
+        sys.exit(-1)
 
-    #  for op, value in opt:
-    #      if op == "-h" :
-    #          usage()
-    #      elif op == "-r" or op == "--repeated":
-    #          have_repeated_key = int(value)
-    #      elif op == "-s" or op == "--subkey":
-    #          sub_key_col = int(value)
-    #      elif op == "-o" or op == "--output":
-    #          output = value
+    output = []
+    group = []
+    for op, value in opt:
+        if op == "-h" :
+            usage()
+        elif op == "-o" or op == "--output":
+            output = value
+        elif op == "-g" or op == "--group":
+            group = value
 
 
-    # option 0 生成proto和data; 1 只生成proto; 2 只生成data
-    op = 0
-    if len(sys.argv) > 2 :
-        op = int(sys.argv[2])
-
-    xls_file_path =  sys.argv[1]
-    ProcessPath(xls_file_path, op)
+    xls_file_path = sys.argv[1]
+    ProcessPath(xls_file_path, 0)
 
 
