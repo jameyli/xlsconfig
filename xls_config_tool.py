@@ -173,6 +173,7 @@ class SheetInterpreter:
 
         # 将所有的输出先写到一个list， 最后统一写到文件
         self._output = []
+        self._key = []
         # 排版缩进空格数
         self._indentation = 0
         # field number 结构嵌套时使用列表
@@ -212,7 +213,7 @@ class SheetInterpreter:
 
         # 将PB转换成py格式
         try :
-            command = PROTOC_BIN + " --python_out=./ " + self._pb_file_name
+            command = PROTOC_BIN + " --python_out=. " + self._pb_file_name
             os.system(command)
         except BaseException, e :
             print "protoc failed!"
@@ -226,6 +227,11 @@ class SheetInterpreter:
         field.comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).encode("utf-8")
 
         LOG_INFO("row=%d, col=%d|%s|%s|%s|%s", self._row, self._col,field.rule, field.typename, field.name, field.comment)
+
+        if field.rule == "key" :
+            field.rule = "required"
+            #  self._key.append(" "*self._indentation + field.rule + " " + field.typename \
+            #          + " " + field.name + " = " + self._GetAndAddFieldIndex() + ";\n")
 
         if field.rule in ["required", "optional", "repeated"] :
             self._LayoutComment(field.comment)
@@ -335,15 +341,10 @@ class SheetInterpreter:
                 self._output.append(" "*self._indentation + field_rule + " " + field_type \
                         + " " + field_name + " = " + self._GetAndAddFieldIndex()\
                         + " [default = false]" + ";\n")
-        elif field_type == "int32" or field_type == "int64"\
-                or field_type == "uint32" or field_type == "uint64"\
-                or field_type == "sint32" or field_type == "sint64"\
-                or field_type == "fixed32" or field_type == "fixed64"\
-                or field_type == "sfixed32" or field_type == "sfixed64" \
-                or field_type == "double" or field_type == "float" :
-                    self._output.append(" "*self._indentation + field_rule + " " + field_type \
-                            + " " + field_name + " = " + self._GetAndAddFieldIndex()\
-                            + " [default = 0]" + ";\n")
+        elif field_type in INTEGER_TYPES or field_type in FRACTION_TYPES :
+                self._output.append(" "*self._indentation + field_rule + " " + field_type \
+                        + " " + field_name + " = " + self._GetAndAddFieldIndex()\
+                        + " [default = 0]" + ";\n")
         elif field_type == "string" or field_type == "bytes" :
             self._output.append(" "*self._indentation + field_rule + " " + field_type \
                     + " " + field_name + " = " + self._GetAndAddFieldIndex()\
@@ -379,6 +380,7 @@ class SheetInterpreter:
 
     def _LayoutArray(self) :
         """输出数组定义"""
+        print self._key
         self._output.append("message " + self._sheet_name + "_ARRAY {\n")
         self._output.append("    repeated " + self._sheet_name + " items = 1;\n}\n")
 
@@ -458,7 +460,10 @@ class DataParser:
     def _ParseField(self, item) :
         field_rule = str(self._sheet.cell_value(FIELD_RULE_ROW, self._col)).strip()
 
-        if field_rule == "required" or field_rule == "optional" :
+        if field_rule == "key" :
+            field_rule = "required"
+
+        if field_rule in ["required", "optional"]:
             field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
             if field_name.find('=') > 0 :
                 name_and_value = field_name.split('=')
@@ -475,30 +480,14 @@ class DataParser:
             self._col += 1
 
         elif field_rule == "repeated" :
-            second_row = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
-            LOG_DEBUG("repeated|%s", second_row);
-            # 一般是简单的单字段，数值用分号相隔
-            # 一般也只能是数字类型
-            field_type = second_row
+            field_type = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
             field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
-            field_value_str = unicode(self._sheet.cell_value(self._row, self._col))
+            field_value_str = unicode(self._sheet.cell_value(self._row, self._col)).strip()
             #增加长度判断
             if len(field_value_str) > 0:
-                if field_value_str.find(";\n") > 0 :
-                    field_value_list = field_value_str.split(";\n")
-                else :
-                    field_value_list = field_value_str.split(";")
-
+                field_value_list = field_value_str.split(";")
                 for field_value in field_value_list :
-                    if len(field_value_str) <= 0:
-                        break;
-
-                    if field_type == "bytes" or field_type == "string" :
-                        item.__getattribute__(field_name).append(field_value.encode("utf8"))
-                    elif field_type == "double" or field_type == "float" :
-                        item.__getattribute__(field_name).append(float(field_value))
-                    else:
-                        item.__getattribute__(field_name).append(int(float(field_value)))
+                    item.__getattribute__(field_name).append(GetValue(field_type, field_value))
 
             self._col += 1
 
@@ -541,69 +530,7 @@ class DataParser:
 
         field_value = self._sheet.cell_value(row, col)
         LOG_INFO("%d|%d|%s", row, col, field_value)
-
         return GetValue(field_type, field_value)
-
-        #  try:
-        #      if field_type == "bool" :
-        #          if len(str(field_value).strip()) <=0 :
-        #              return False
-        #          else :
-        #              return (True if int(field_value) != 0 else False)
-        #      elif field_type == "int32" or field_type == "int64"\
-        #              or  field_type == "uint32" or field_type == "uint64"\
-        #              or field_type == "sint32" or field_type == "sint64"\
-        #              or field_type == "fixed32" or field_type == "fixed64"\
-        #              or field_type == "sfixed32" or field_type == "sfixed64" :
-        #                  if len(str(field_value).strip()) <=0 :
-        #                      return None
-        #                  else :
-        #                      return int(field_value)
-        #      elif field_type == "double" or field_type == "float" :
-        #              if len(str(field_value).strip()) <=0 :
-        #                  return None
-        #              else :
-        #                  return float(field_value)
-        #      elif field_type == "string" :
-        #          field_value = unicode(field_value)
-        #          if len(field_value) <= 0 :
-        #              return None
-        #          else :
-        #              return field_value
-        #      elif field_type == "bytes" :
-        #          field_value = unicode(field_value).encode('utf-8')
-        #          if len(field_value) <= 0 :
-        #              return None
-        #          else :
-        #              return field_value
-        #      elif field_type == "DateTime" :
-        #          field_value = unicode(field_value).encode('utf-8')
-        #          if len(field_value) <= 0 :
-        #              return 0
-        #          else :
-        #              import time
-        #              time_struct = time.strptime(field_value, "%Y-%m-%d %H:%M:%S")
-        #              #GMT time
-        #              timt_stamp = int(time.mktime(time_struct) - time.timezone)
-        #              return timt_stamp
-        #      elif field_type == "TimeDuration" :
-        #          field_value = unicode(field_value).encode('utf-8')
-        #          if len(field_value) <= 0 :
-        #              return 0
-        #          else :
-        #              import datetime
-        #              import time
-        #              time_struct=0
-        #              try :
-        #                  time_struct = time.strptime(field_value, "%HH")
-        #              except BaseException, e :
-        #                  time_struct = time.strptime(field_value, "%jD%HH")
-        #              return 3600 * (time_struct.tm_yday * 24 + time_struct.tm_hour)
-        #      else :
-        #          return None
-        #  except BaseException, e :
-        #      print "parse cell(%u, %u) error, please check it, maybe type is wrong."%(row, col)
-        #      raise
 
     def _WriteData2File(self, data) :
         if not os.path.exists(BYTES_OUTPUT_PATH) : os.makedirs(BYTES_OUTPUT_PATH)
@@ -696,10 +623,6 @@ class LuaParser:
         field.comment = unicode(self._sheet.cell_value(FIELD_COMMENT_ROW, self._col)).encode("utf-8")
         field.value_str = self._sheet.cell_value(self._row, self._col)
 
-        #  if len(str(field.value_str).strip()) <=0 :
-        #      self._col += 1
-        #      return
-
         if field.rule == "key" :
             field.value = GetValue(field.typename, field.value_str)
             self.row_key[field.name] = field.value
@@ -714,19 +637,16 @@ class LuaParser:
             self._col += 1
 
         elif field.rule == "repeated" :
-            field_value_str = unicode(self._sheet.cell_value(self._row, self._col))
+            field_value_str = unicode(self._sheet.cell_value(self._row, self._col)).strip()
             field_value_list = []
             if len(field_value_str) > 0:
-                if field_value_str.find(";\n") > 0 :
-                    field_value_list = field_value_str.split(";\n")
-                else :
-                    field_value_list = field_value_str.split(";")
+                field_value_list = field_value_str.split(";")
                 [GetValue(field.typename, e) for e in field_value_list]
 
-                self.row_str += field.name + '= {'
+                vstr = field.name + '= {'
                 for v in field_value_list :
-                    self.row_str += '\"' + str(v) + '\", '
-                self.row_str += '},'
+                    vstr += '\"' + str(v) + '\", '
+                self.row_str += vstr[:-2] + '},'
 
             self._col += 1
 
