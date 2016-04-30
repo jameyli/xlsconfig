@@ -132,7 +132,7 @@ def GetValue(typename, value_str) :
     elif typename == "bool" :
         return (True if int(value_str) != 0 else False)
     else :
-        return str(value_str)
+        return unicode(value_str)
 
 def GetDefaultValue(typename) :
     if typename in INTEGER_TYPES or typename in FRACTION_TYPES or typename == "DateTime" or typename == "TimeDuration" :
