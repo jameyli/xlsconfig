@@ -3,7 +3,7 @@
 
 ##
 # @file:   xls_config_tool.py
-# @author: jameyli <lgy AT live DOT com>
+# @author: jameyli <github.com/jameyli>
 # @brief:  xls 配置导表工具
 
 import xlrd # for read excel
@@ -12,6 +12,7 @@ import os
 import commands
 import getopt
 import shutil
+import re
 
 reload(sys)
 sys.setdefaultencoding( "utf-8" )
@@ -55,51 +56,51 @@ class Color :
     WHITE = "\033[37m"
     NONE = "\033[0m"
 
-class LogHelp :
-    """日志辅助类"""
-    _logger = None
-    _close_imme = True
+#  class LogHelp :
+#      """日志辅助类"""
+#      _logger = None
+#      _close_imme = True
 
-    @staticmethod
-    def set_close_flag(flag):
-        LogHelp._close_imme = flag
+#      @staticmethod
+#      def set_close_flag(flag):
+#          LogHelp._close_imme = flag
 
-    @staticmethod
-    def _initlog():
-        import logging
+#      @staticmethod
+#      def _initlog():
+#          import logging
 
-        LogHelp._logger = logging.getLogger()
-        logfile = 'xls_config_tool.log'
-        hdlr = logging.FileHandler(logfile)
-        formatter = logging.Formatter('%(asctime)s|%(levelname)s|%(lineno)d|%(funcName)s|%(message)s')
-        hdlr.setFormatter(formatter)
-        LogHelp._logger.addHandler(hdlr)
-        LogHelp._logger.setLevel(logging.NOTSET)
-        # LogHelp._logger.setLevel(logging.WARNING)
+#          LogHelp._logger = logging.getLogger()
+#          logfile = 'xls_config_tool.log'
+#          hdlr = logging.FileHandler(logfile)
+#          formatter = logging.Formatter('%(asctime)s|%(levelname)s|%(lineno)d|%(funcName)s|%(message)s')
+#          hdlr.setFormatter(formatter)
+#          LogHelp._logger.addHandler(hdlr)
+#          LogHelp._logger.setLevel(logging.NOTSET)
+#          # LogHelp._logger.setLevel(logging.WARNING)
 
-        LogHelp._logger.info("\n\n\n")
-        LogHelp._logger.info("logger is inited!")
+#          LogHelp._logger.info("\n\n\n")
+#          LogHelp._logger.info("logger is inited!")
 
-    @staticmethod
-    def get_logger() :
-        if LogHelp._logger is None :
-            LogHelp._initlog()
+#      @staticmethod
+#      def get_logger() :
+#          if LogHelp._logger is None :
+#              LogHelp._initlog()
 
-        return LogHelp._logger
+#          return LogHelp._logger
 
-    @staticmethod
-    def close() :
-        if LogHelp._close_imme:
-            import logging
-            if LogHelp._logger is None :
-                return
-            logging.shutdown()
+#      @staticmethod
+#      def close() :
+#          if LogHelp._close_imme:
+#              import logging
+#              if LogHelp._logger is None :
+#                  return
+#              logging.shutdown()
 
-# log macro
-LOG_DEBUG=LogHelp.get_logger().debug
-LOG_INFO=LogHelp.get_logger().info
-LOG_WARN=LogHelp.get_logger().warn
-LOG_ERROR=LogHelp.get_logger().error
+#  # log macro
+#  LOG_DEBUG=LogHelp.get_logger().debug
+#  LOG_INFO=LogHelp.get_logger().info
+#  LOG_WARN=LogHelp.get_logger().warn
+#  LOG_ERROR=LogHelp.get_logger().error
 
 
 ###############################################################################
@@ -133,6 +134,15 @@ def GetValue(typename, value_str) :
         return (True if int(value_str) != 0 else False)
     else :
         return unicode(value_str)
+
+def GetLuaValue(typename, value_str) :
+    value = GetValue(typename, value_str)
+    if value == None :
+        return None
+
+    if typename == "string" :
+        return "\"" + str(value) + "\""
+    return value
 
 def GetDefaultValue(typename) :
     if typename in INTEGER_TYPES or typename in FRACTION_TYPES or typename == "DateTime" or typename == "TimeDuration" :
@@ -241,7 +251,7 @@ class SheetInterpreter:
 
     def Interpreter(self) :
         """对外的接口"""
-        LOG_INFO("begin Interpreter, row_count = %d, col_count = %d", self._row_count, self._col_count)
+        #  LOG_INFO("begin Interpreter, row_count = %d, col_count = %d", self._row_count, self._col_count)
 
         self._LayoutFileHeader()
 
@@ -261,7 +271,7 @@ class SheetInterpreter:
 
         self._Write2File()
 
-        LogHelp.close()
+        #  LogHelp.close()
 
         # 将PB转换成py格式
         try :
@@ -274,7 +284,7 @@ class SheetInterpreter:
     def _FieldDefine(self) :
         field = GetField(self._sheet, self._col)
 
-        LOG_INFO("row=%d, col=%d|%s|%s|%s|%s", self._row, self._col,field.rule, field.typename, field.name, field.comment)
+        #  LOG_INFO("row=%d, col=%d|%s|%s|%s|%s", self._row, self._col,field.rule, field.typename, field.name, field.comment)
 
         if field.rule == "key" :
             field.rule = "required"
@@ -291,7 +301,7 @@ class SheetInterpreter:
             repeated_num = int(str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).split('*')[1])
             struct_name = "InternalType_" + field.name;
 
-            LOG_INFO("%s|%d|%s|%s", field.rule, field_num, struct_name, field.name)
+            #  LOG_INFO("%s|%d|%s|%s", field.rule, field_num, struct_name, field.name)
 
             if (self._IsStructDefined(struct_name)) :
                 self._is_layout = False
@@ -398,7 +408,6 @@ class SheetInterpreter:
 
     def _LayoutArray(self) :
         """输出数组定义"""
-        print self._key
         self._output.append("message " + self._sheet_name + "_ARRAY {\n")
         self._output.append("    repeated " + self._sheet_name + " items = 1;\n}\n")
 
@@ -437,7 +446,7 @@ class DataParser:
 
     def Parse(self) :
         """对外的接口:解析数据"""
-        LOG_INFO("begin parse, row_count = %d, col_count = %d", self._row_count, self._col_count)
+        #  LOG_INFO("begin parse, row_count = %d, col_count = %d", self._row_count, self._col_count)
 
         item_array = getattr(self._module, self._sheet_name+'_ARRAY')()
 
@@ -454,22 +463,22 @@ class DataParser:
             # 如果 id 是 空 直接跳过改行
             info_id = str(self._sheet.cell_value(self._row, id_col)).strip()
             if info_id == "" :
-                LOG_WARN("%d is None", self._row)
+                #  LOG_WARN("%d is None", self._row)
                 continue
             item = item_array.items.add()
             self._ParseLine(item)
 
-        LOG_INFO("parse result:\n%s", item_array)
+        #  LOG_INFO("parse result:\n%s", item_array)
 
         self._WriteReadableData2File(str(item_array))
 
         data = item_array.SerializeToString()
         self._WriteData2File(data)
 
-        LogHelp.close()
+        #  LogHelp.close()
 
     def _ParseLine(self, item) :
-        LOG_INFO("%d", self._row)
+        #  LOG_INFO("%d", self._row)
 
         self._col = 0
         while self._col < self._col_count :
@@ -488,8 +497,8 @@ class DataParser:
                 field_name = str(name_and_value[0]).strip()
             field_type = str(self._sheet.cell_value(FIELD_TYPE_ROW, self._col)).strip()
 
-            LOG_INFO("%d|%d", self._row, self._col)
-            LOG_INFO("%s|%s|%s", field_rule, field_type, field_name)
+            #  LOG_INFO("%d|%d", self._row, self._col)
+            #  LOG_INFO("%s|%s|%s", field_rule, field_type, field_name)
 
             field_value = self._GetFieldValue(field_type, self._row, self._col)
             # 有value才设值
@@ -516,7 +525,7 @@ class DataParser:
             field_name = str(self._sheet.cell_value(FIELD_NAME_ROW, self._col)).strip()
             struct_name = "InternalType_" + field_name;
 
-            LOG_INFO("%s|%d|%s|%s", field_rule, field_num, struct_name, field_name)
+            #  LOG_INFO("%s|%d|%s|%s", field_rule, field_num, struct_name, field_name)
 
             self._col += 1
 
@@ -546,7 +555,7 @@ class DataParser:
         """将pb类型转换为python类型"""
 
         field_value = self._sheet.cell_value(row, col)
-        LOG_INFO("%d|%d|%s", row, col, field_value)
+        #  LOG_INFO("%d|%d|%s", row, col, field_value)
         return GetValue(field_type, field_value)
 
     def _WriteData2File(self, data) :
@@ -566,7 +575,7 @@ class DataParser:
 
 class LuaParser:
     """excel to lua"""
-    def __init__(self, xls_file_path, sheet):
+    def __init__(self, xls_file_path, sheet, group):
         self._xls_file_path = xls_file_path
         self._sheet = sheet
         self._sheet_name = self._sheet.name
@@ -574,7 +583,7 @@ class LuaParser:
         self._row_count = len(self._sheet.col_values(0))
         self._col_count = len(self._sheet.row_values(0))
 
-        self._group = []
+        self._group = group
 
         self._row = 0
         self._col = 0
@@ -597,7 +606,9 @@ class LuaParser:
 
         self.all_str += "}"
 
-        self._WriteData2File(self.all_str)
+        result = re.sub(',}', '}', self.all_str)
+
+        self._WriteData2File(result)
         self._CheckLua()
 
     def _ParseLine(self) :
@@ -629,7 +640,7 @@ class LuaParser:
         field.value_str = self._sheet.cell_value(self._row, self._col)
 
         if field.rule == "key" :
-            field.value = GetValue(field.typename, field.value_str)
+            field.value = GetLuaValue(field.typename, field.value_str)
             self.row_key[field.name] = field.value
 
         if field.rule in ["key", "required", "optional"] :
@@ -637,9 +648,9 @@ class LuaParser:
             if field.group != None and (field.group not in self._group) :
                 return
 
-            field.value = GetValue(field.typename, field.value_str)
+            field.value = GetLuaValue(field.typename, field.value_str)
             if field.value != None :
-                self.row_str += field.name + '=\"' + str(field.value) + '\",'
+                self.row_str += field.name + '=' + str(field.value) + ','
             elif field.default_value != None :
                 self.row_str += field.name + '=' + str(field.default_value) + ','
 
@@ -655,9 +666,9 @@ class LuaParser:
 
                 vstr = field.name + '= {'
                 for e in field_value_list :
-                    v = GetValue(field.typename, e)
-                    vstr += '\"' + str(v) + '\",'
-                self.row_str += vstr[:-1] + '},'
+                    v = GetLuaValue(field.typename, e)
+                    vstr += '' + str(v) + ','
+                self.row_str += vstr + '},'
 
 
         elif field.rule == "struct":
@@ -673,7 +684,7 @@ class LuaParser:
 
             for i in range(field.struct.repeated_num):
                 self._ParseStruct(field.struct.field_num)
-            self.row_str += "}, "
+            self.row_str += "},"
         else :
             self._col += 1
             return
@@ -685,7 +696,7 @@ class LuaParser:
         self.row_str += "{"
         for i in range(field_num) :
             self._ParseField()
-        self.row_str += "}, "
+        self.row_str += "},"
 
     def _WriteData2File(self, data) :
         if not os.path.exists(LUA_OUTPUT_PATH) : os.makedirs(LUA_OUTPUT_PATH)
@@ -702,9 +713,8 @@ class LuaParser:
 
 ###############################################################################
 
-def ProcessOneFile(xls_file_path, op) :
+def ProcessOneFile(xls_file_path, output, group) :
     if not ".xls" in xls_file_path :
-        #  print "Skip %s" %(xls_file_path)
         return
 
     try :
@@ -720,66 +730,76 @@ def ProcessOneFile(xls_file_path, op) :
             print "Skip %s" %(sheet_name)
             continue
 
-        try :
-            sheet = workbook.sheet_by_name(sheet_name)
-        except BaseException, e :
-            print Color.YELLOW, e, Color.NONE
-            break
+        sheet = workbook.sheet_by_name(sheet_name)
 
-        interpreter = SheetInterpreter(xls_file_path, sheet)
-        interpreter.Interpreter()
-        print Color.GREEN + "Interpreter %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
+        if output == None :
+            output = ["proto", "bytes", "lua"]
 
-        parser = DataParser(xls_file_path, sheet)
-        parser.Parse()
-        print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
+        if "proto" in output or "bytes" in output:
+            interpreter = SheetInterpreter(xls_file_path, sheet)
+            interpreter.Interpreter()
+            print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
-        parser = LuaParser(xls_file_path, sheet)
-        parser.Parse()
-        print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
+        if "bytes" in output:
+            parser = DataParser(xls_file_path, sheet)
+            parser.Parse()
+            print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
+
+        if "lua" in output:
+            parser = LuaParser(xls_file_path, sheet, group)
+            parser.Parse()
+            print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
     workbook.release_resources()
 
-def ProcessPath(file_path, op) :
+def ProcessPath(file_path, output, group) :
     if os.path.isfile(file_path) :
-        ProcessOneFile(file_path, op)
+        ProcessOneFile(file_path, output, group)
     elif os.path.isdir(file_path) :
         path_list = os.listdir(file_path)
         for path in path_list :
             real_file_path = file_path+"/"+path
-            ProcessPath(real_file_path, op)
+            ProcessPath(real_file_path, output, group)
 
 def usage():
     print '''
-    Usage: %s EXCEL_FILE [OPTIONS]
-    ''' %(sys.argv[0])
+Usage: %s [options] excel_file
+option:
+    -h, --help
+    -o, --output=   proto, bytes, lua
+    -g, --group=    S, C or user defined in excel like "optional = S"
+''' %(sys.argv[0])
 
 
 if __name__ == '__main__' :
-    if len(sys.argv) < 2 :
-        Usage()
-        sys.exit(-1)
-
     try:
-        opt, args = getopt.getopt(sys.argv[3:], "ho:g", ["help", "output=", "group="])
+        opt, args = getopt.getopt(sys.argv[1:], "ho:g:", ["help", "output=", "group="])
     except getopt.GetoptError, err:
         print "err:",(err)
         usage()
         sys.exit(-1)
 
-    output = []
+    if len(args) > 0 :
+        xls_file_path = args[0]
+    else :
+        xls_file_path = "./"
+
+    output = None
     group = []
     for op, value in opt:
-        if op == "-h" :
+        if op == "-h" or op == "--help":
             usage()
+            sys.exit(0)
         elif op == "-o" or op == "--output":
-            output = value
+            output = []
+            output.append(value)
         elif op == "-g" or op == "--group":
-            group = value
+            group = []
+            group.append(value)
 
     if os.path.exists(OUTPUT_PATH) : shutil.rmtree(OUTPUT_PATH)
 
-    xls_file_path = sys.argv[1]
-    ProcessPath(xls_file_path, 0)
+
+    ProcessPath(xls_file_path, output, group)
 
 
