@@ -32,7 +32,7 @@ PROTOC_BIN = "protoc "
 OUTPUT_PATH = "output/"
 PROTO_OUTPUT_PATH = OUTPUT_PATH + "proto/"
 BYTES_OUTPUT_PATH = OUTPUT_PATH + "bytes/"
-JSON_OUTPUT_PATH = OUTPUT_PATH + "json/"
+TEXT_OUTPUT_PATH = OUTPUT_PATH + "text/"
 LUA_OUTPUT_PATH = OUTPUT_PATH + "lua/"
 
 CPP_OUTPUT_PATH = ""#PROTO_OUTPUT_PATH + "cpp/"
@@ -534,8 +534,8 @@ class DataParser:
         file.close()
 
     def _WriteReadableData2File(self, data) :
-        if not os.path.exists(JSON_OUTPUT_PATH) : os.makedirs(JSON_OUTPUT_PATH)
-        file_name = JSON_OUTPUT_PATH + OUTPUT_FILE_PREFIX + self._package_name + "_" + self._sheet_name.lower() + ".json"
+        if not os.path.exists(TEXT_OUTPUT_PATH) : os.makedirs(TEXT_OUTPUT_PATH)
+        file_name = TEXT_OUTPUT_PATH + OUTPUT_FILE_PREFIX + self._package_name + "_" + self._sheet_name.lower() + ".text"
         file = open(file_name, 'wb+')
         file.write(data)
         file.close()
