@@ -184,8 +184,8 @@ def GetField(sheet, col) :
     field.rule = str(sheet.cell_value(FIELD_RULE_ROW, col)).strip()
     if ('=' in field.rule) :
         tmp_list = field.rule.split('=')
-        field.rule = tmp_list[0]
-        field.group = tmp_list[1]
+        field.rule = tmp_list[0].strip()
+        field.group = tmp_list[1].strip()
 
     field.typename = str(sheet.cell_value(FIELD_TYPE_ROW, col)).strip()
     field.layout_typename = field.typename
@@ -194,8 +194,8 @@ def GetField(sheet, col) :
     field.name = str(sheet.cell_value(FIELD_NAME_ROW, col)).strip().strip()
     if ('=' in field.name) :
         tmp_list = field.name.split('=')
-        field.name = tmp_list[0]
-        field.default_value_str = tmp_list[1]
+        field.name = tmp_list[0].strip()
+        field.default_value_str = tmp_list[1].strip()
         field.default_value = GetValue(field.typename, field.default_value_str)
 
     field.comment = unicode(sheet.cell_value(FIELD_COMMENT_ROW, col)).encode("utf-8")
@@ -614,7 +614,7 @@ class LuaParser:
 
         if field.rule in ["key", "required", "optional"] :
             self._col += 1
-            if field.group != None and (field.group not in self._group) :
+            if self._group != None and field.group != None and (field.group not in self._group) :
                 return
 
             field.value = GetLuaValue(field.typename, field.value_str)
@@ -626,7 +626,7 @@ class LuaParser:
 
         elif field.rule == "repeated" :
             self._col += 1
-            if field.group != None and (field.group not in self._group) :
+            if self._group != None and field.group != None and (field.group not in self._group) :
                 return
 
             field_value_list = []
@@ -642,7 +642,7 @@ class LuaParser:
 
         elif field.rule == "struct":
             self._col += 1
-            if field.group != None and (field.group not in self._group) :
+            if self._group != None and field.group != None and (field.group not in self._group) :
                 self._col += field.struct.field_num * field.struct.repeated_num
                 return
 
@@ -754,7 +754,7 @@ if __name__ == '__main__' :
         xls_file_path = "."
 
     output = None
-    group = []
+    group = None
     for op, value in opt:
         if op == "-h" or op == "--help":
             usage()
