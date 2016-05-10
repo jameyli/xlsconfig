@@ -9,7 +9,7 @@
 import xlrd # for read excel
 import sys
 import os
-import commands
+import subprocess
 import getopt
 import shutil
 import re
@@ -27,7 +27,7 @@ FIELD_NAME_ROW = 2
 FIELD_COMMENT_ROW = 3
 DATA_BEGIN_ROW = 4
 
-PROTOC_BIN = "protoc "
+PROTOC_BIN = "protoc"
 
 OUTPUT_PATH = "output/"
 PROTO_OUTPUT_PATH = OUTPUT_PATH + "proto/"
@@ -226,8 +226,8 @@ class SheetInterpreter:
 
         # 将PB转换成py格式
         try :
-            command = PROTOC_BIN + " --python_out=. " + self._pb_file_name
-            os.system(command)
+            #  command = PROTOC_BIN + " --python_out=. " + self._pb_file_name
+            subprocess.call([PROTOC_BIN, "--python_out=.", self._pb_file_name])
         except BaseException, e :
             print "protoc failed!"
             raise
@@ -625,7 +625,7 @@ class LuaParser:
 
     def _CheckLua(self) :
         command = "lua " + self._data_file_name
-        status, output = commands.getstatusoutput(command)
+        status = subprocess.call(["lua", self._data_file_name])
         if (status != 0) :
             print Color.RED + "[ERROR]: Test " + self._data_file_name + "  FAILED!" + Color.NONE
             raise
