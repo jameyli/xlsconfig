@@ -627,7 +627,7 @@ class LuaParser:
         command = "lua " + self._data_file_name
         status, output = commands.getstatusoutput(command)
         if (status != 0) :
-            print Color.RED + "[ERROR]: Test " + lua_file_name + "  FAILED!" + Color.NONE
+            print Color.RED + "[ERROR]: Test " + self._data_file_name + "  FAILED!" + Color.NONE
             raise
 
 ###############################################################################
