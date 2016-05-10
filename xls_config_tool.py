@@ -17,17 +17,9 @@ import re
 reload(sys)
 sys.setdefaultencoding( "utf-8" )
 
-# TAP的空格数
-TAP_BLANK_NUM = 4
-
-FIELD_RULE_ROW = 0
-# 这一行还表示重复的最大个数，或结构体元素数
-FIELD_TYPE_ROW = 1
-FIELD_NAME_ROW = 2
-FIELD_COMMENT_ROW = 3
-DATA_BEGIN_ROW = 4
 
 PROTOC_BIN = "protoc"
+LUA_BIN = "lua"
 
 OUTPUT_PATH = "output/"
 PROTO_OUTPUT_PATH = OUTPUT_PATH + "proto/"
@@ -42,6 +34,16 @@ OUTPUT_FILE_PREFIX = "xlsc_"
 
 INTEGER_TYPES = ["int32", "int64", "uint32", "uint64"]
 FRACTION_TYPES = ["float", "double"]
+
+# TAP的空格数
+TAP_BLANK_NUM = 4
+
+FIELD_RULE_ROW = 0
+# 这一行还表示重复的最大个数，或结构体元素数
+FIELD_TYPE_ROW = 1
+FIELD_NAME_ROW = 2
+FIELD_COMMENT_ROW = 3
+DATA_BEGIN_ROW = 4
 
 ###############################################################################
 # 日志相关
@@ -222,11 +224,8 @@ class SheetInterpreter:
 
         self._Write2File()
 
-        #  LogHelp.close()
-
         # 将PB转换成py格式
         try :
-            #  command = PROTOC_BIN + " --python_out=. " + self._pb_file_name
             subprocess.call([PROTOC_BIN, "--python_out=.", self._pb_file_name])
         except BaseException, e :
             print "protoc failed!"
@@ -624,8 +623,7 @@ class LuaParser:
         file.close()
 
     def _CheckLua(self) :
-        command = "lua " + self._data_file_name
-        status = subprocess.call(["lua", self._data_file_name])
+        status = subprocess.call([LUA_BIN, self._data_file_name])
         if (status != 0) :
             print Color.RED + "[ERROR]: Test " + self._data_file_name + "  FAILED!" + Color.NONE
             raise
