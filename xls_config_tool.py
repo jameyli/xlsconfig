@@ -177,6 +177,8 @@ class FieldItem:
 
         self.value_str = ""
         self.value = None
+    def GetValue(self) :
+        return GetValue(self.typename, self.value_str)
 
 def GetField(sheet, col) :
     #创建对象。方便后面访问
@@ -410,10 +412,12 @@ class SheetInterpreter:
 
 class DataParser:
     """解析excel的数据"""
-    def __init__(self, xls_file_path, sheet):
+    def __init__(self, xls_file_path, sheet, group):
         self._xls_file_path = xls_file_path
         self._sheet = sheet
         self._sheet_name = self._sheet.name
+
+        self._group = group
 
         self._row_count = len(self._sheet.col_values(0))
         self._col_count = len(self._sheet.row_values(0))
@@ -461,6 +465,8 @@ class DataParser:
 
         self._WriteReadableData2File(str(item_array))
 
+        print item_array
+
         data = item_array.SerializeToString()
         self._WriteData2File(data)
 
@@ -475,27 +481,30 @@ class DataParser:
 
     def _ParseField(self, item) :
         field = GetField(self._sheet, self._col)
-        #  field_rule = str(self._sheet.cell_value(FIELD_RULE_ROW, self._col)).strip()
+        field.value_str = self._sheet.cell_value(self._row, self._col)
 
         if field.rule == "key" :
             field.rule = "required"
 
         if field.rule in ["required", "optional"]:
-            field.value = self._GetFieldValue(field.typename, self._row, self._col)
-            # 有value才设值
+            self._col += 1
+            if self._group != None and field.group != None and (field.group not in self._group) :
+                return
+
+            field.value = field.GetValue()
             if field.value != None :
                 item.__setattr__(field.name, field.value)
-            self._col += 1
 
         elif field.rule == "repeated" :
-            field_value_str = unicode(self._sheet.cell_value(self._row, self._col)).strip()
-            #增加长度判断
-            if len(field_value_str) > 0:
-                value_list = field_value_str.split(";")
-                for value in value_list :
-                    item.__getattribute__(field.name).append(GetValue(field.typename, value))
-
             self._col += 1
+            if self._group != None and field.group != None and (field.group not in self._group) :
+                return
+
+            field_value_list = []
+            if len(field.value_str) > 0:
+                field_value_list = field.value_str.strip().split(";")
+                for value in field_value_list :
+                    item.__getattribute__(field.name).append(GetValue(field.typename, value))
 
         elif "struct" in field.rule :
             self._col += 1
@@ -507,6 +516,11 @@ class DataParser:
             for i in range(field.struct.repeated_num):
                 struct_item = item.__getattribute__(field.name).add()
                 self._ParseStruct(field.struct.field_num, struct_item)
+                print self._group
+                print field.group
+                if self._group != None and field.group != None and (field.group not in self._group) :
+                    item.__getattribute__(field.name).__delitem__(-1)
+                    continue
                 if len(struct_item.ListFields()) == 0 :
                     item.__getattribute__(field.name).__delitem__(-1)
         else :
@@ -710,7 +724,7 @@ def ProcessOneFile(xls_file_path, output, group) :
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
         if "bytes" in output:
-            parser = DataParser(xls_file_path, sheet)
+            parser = DataParser(xls_file_path, sheet, group)
             parser.Parse()
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
