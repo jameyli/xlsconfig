@@ -56,51 +56,6 @@ class Color :
     WHITE = "\033[37m"
     NONE = "\033[0m"
 
-#  class LogHelp :
-#      """日志辅助类"""
-#      _logger = None
-#      _close_imme = True
-
-#      @staticmethod
-#      def set_close_flag(flag):
-#          LogHelp._close_imme = flag
-
-#      @staticmethod
-#      def _initlog():
-#          import logging
-
-#          LogHelp._logger = logging.getLogger()
-#          logfile = 'xls_config_tool.log'
-#          hdlr = logging.FileHandler(logfile)
-#          formatter = logging.Formatter('%(asctime)s|%(levelname)s|%(lineno)d|%(funcName)s|%(message)s')
-#          hdlr.setFormatter(formatter)
-#          LogHelp._logger.addHandler(hdlr)
-#          LogHelp._logger.setLevel(logging.NOTSET)
-#          # LogHelp._logger.setLevel(logging.WARNING)
-
-#          LogHelp._logger.info("\n\n\n")
-#          LogHelp._logger.info("logger is inited!")
-
-#      @staticmethod
-#      def get_logger() :
-#          if LogHelp._logger is None :
-#              LogHelp._initlog()
-
-#          return LogHelp._logger
-
-#      @staticmethod
-#      def close() :
-#          if LogHelp._close_imme:
-#              import logging
-#              if LogHelp._logger is None :
-#                  return
-#              logging.shutdown()
-
-#  # log macro
-#  LOG_DEBUG=LogHelp.get_logger().debug
-#  LOG_INFO=LogHelp.get_logger().info
-#  LOG_WARN=LogHelp.get_logger().warn
-#  LOG_ERROR=LogHelp.get_logger().error
 
 
 ###############################################################################
@@ -248,7 +203,6 @@ class SheetInterpreter:
 
     def Interpreter(self) :
         """对外的接口"""
-        #  LOG_INFO("begin Interpreter, row_count = %d, col_count = %d", self._row_count, self._col_count)
 
         self._LayoutFileHeader()
 
@@ -280,8 +234,6 @@ class SheetInterpreter:
 
     def _FieldDefine(self) :
         field = GetField(self._sheet, self._col)
-
-        #  LOG_INFO("row=%d, col=%d|%s|%s|%s|%s", self._row, self._col,field.rule, field.typename, field.name, field.comment)
 
         if field.rule == "key" :
             field.rule = "required"
@@ -439,7 +391,6 @@ class DataParser:
 
     def Parse(self) :
         """对外的接口:解析数据"""
-        #  LOG_INFO("begin parse, row_count = %d, col_count = %d", self._row_count, self._col_count)
 
         item_array = getattr(self._module, self._sheet_name+'_ARRAY')()
 
@@ -456,24 +407,18 @@ class DataParser:
             # 如果 id 是 空 直接跳过改行
             info_id = str(self._sheet.cell_value(self._row, id_col)).strip()
             if info_id == "" :
-                #  LOG_WARN("%d is None", self._row)
                 continue
             item = item_array.items.add()
             self._ParseLine(item)
 
-        #  LOG_INFO("parse result:\n%s", item_array)
-
         self._WriteReadableData2File(str(item_array))
 
-        print item_array
+        #print item_array
 
         data = item_array.SerializeToString()
         self._WriteData2File(data)
 
-        #  LogHelp.close()
-
     def _ParseLine(self, item) :
-        #  LOG_INFO("%d", self._row)
 
         self._col = 0
         while self._col < self._col_count :
@@ -516,8 +461,6 @@ class DataParser:
             for i in range(field.struct.repeated_num):
                 struct_item = item.__getattribute__(field.name).add()
                 self._ParseStruct(field.struct.field_num, struct_item)
-                print self._group
-                print field.group
                 if self._group != None and field.group != None and (field.group not in self._group) :
                     item.__getattribute__(field.name).__delitem__(-1)
                     continue
@@ -533,13 +476,6 @@ class DataParser:
         # 跳过结构体定义
         for i in range(field_num) :
             self._ParseField(struct_item)
-
-    def _GetFieldValue(self, field_type, row, col) :
-        """将pb类型转换为python类型"""
-
-        field_value = self._sheet.cell_value(row, col)
-        #  LOG_INFO("%d|%d|%s", row, col, field_value)
-        return GetValue(field_type, field_value)
 
     def _WriteData2File(self, data) :
         if not os.path.exists(BYTES_OUTPUT_PATH) : os.makedirs(BYTES_OUTPUT_PATH)
