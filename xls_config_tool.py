@@ -6,17 +6,19 @@
 # @author: jameyli <github.com/jameyli>
 # @brief:  xls 配置导表工具
 
-import xlrd # for read excel
+#  import xlrd # for read excel
 import sys
 import os
 import subprocess
 import getopt
 import shutil
 import re
+import pandas as pd
+import datetime
+import time
 
 reload(sys)
 sys.setdefaultencoding( "utf-8" )
-
 
 PROTOC_BIN = "protoc"
 LUA_BIN = "lua"
@@ -62,8 +64,11 @@ class Color :
 
 ###############################################################################
 def GetValue(typename, value_str) :
-    #  print typename, value_str
+    #  print typename, value_str, type(value_str)
     if len(str(value_str).strip()) <=0 :
+        return None
+
+    if value_str == "nan" :
         return None
 
     if typename in INTEGER_TYPES :
@@ -72,15 +77,12 @@ def GetValue(typename, value_str) :
         return float(value_str)
     elif typename == "DateTime" :
         typename = unicode(value_str).encode('utf-8')
-        import time
         time_struct = time.strptime(value_str, "%Y-%m-%d %H:%M:%S")
         #  #GMT time
         timt_stamp = int(time.mktime(time_struct) - time.timezone)
         return timt_stamp
     elif typename == "TimeDuration" :
         field_value = unicode(value_str).encode('utf-8')
-        import datetime
-        import time
         time_struct=0
         try :
             time_struct = time.strptime(value_str, "%HH")
@@ -140,29 +142,29 @@ class FieldItem:
 def GetField(sheet, col) :
     #创建对象。方便后面访问
     field = FieldItem()
-    field.rule = str(sheet.cell_value(FIELD_RULE_ROW, col)).strip()
+    field.rule = str(sheet.get_value(FIELD_RULE_ROW, col)).strip()
     if ('=' in field.rule) :
         tmp_list = field.rule.split('=')
         field.rule = tmp_list[0].strip()
         field.group = tmp_list[1].strip()
 
-    field.typename = str(sheet.cell_value(FIELD_TYPE_ROW, col)).strip()
+    field.typename = str(sheet.get_value(FIELD_TYPE_ROW, col)).strip()
     field.layout_typename = field.typename
     if field.typename in ["DateTime", "TimeDuration"] :
         field.layout_typename = "uint32"
-    field.name = str(sheet.cell_value(FIELD_NAME_ROW, col)).strip().strip()
+    field.name = str(sheet.get_value(FIELD_NAME_ROW, col)).strip().strip()
     if ('=' in field.name) :
         tmp_list = field.name.split('=')
         field.name = tmp_list[0].strip()
         field.default_value_str = tmp_list[1].strip()
         field.default_value = GetValue(field.typename, field.default_value_str)
 
-    field.comment = unicode(sheet.cell_value(FIELD_COMMENT_ROW, col)).encode("utf-8")
+    field.comment = unicode(sheet.get_value(FIELD_COMMENT_ROW, col)).encode("utf-8")
 
     if field.rule == "struct" :
         field.struct = StructItem()
-        field.struct.field_num = int(str(sheet.cell_value(FIELD_TYPE_ROW, col)).split('*')[0])
-        field.struct.repeated_num = int(str(sheet.cell_value(FIELD_TYPE_ROW, col)).split('*')[1])
+        field.struct.field_num = int(str(sheet.get_value(FIELD_TYPE_ROW, col)).split('*')[0])
+        field.struct.repeated_num = int(str(sheet.get_value(FIELD_TYPE_ROW, col)).split('*')[1])
         field.struct.struct_name = "InternalType_" + field.name;
         field.typename = field.struct.struct_name
         field.layout_typename = field.typename
@@ -174,14 +176,17 @@ def GetField(sheet, col) :
 
 class SheetInterpreter:
     """通过excel配置生成配置的protobuf定义文件"""
-    def __init__(self, xls_file_path, sheet):
+    def __init__(self, xls_file_path, sheet_name, sheet):
         self._xls_file_path = xls_file_path
         self._sheet = sheet
-        self._sheet_name = self._sheet.name
+        self._sheet_name = sheet_name
 
-        # 行数和列数
-        self._row_count = len(self._sheet.col_values(0))
-        self._col_count = len(self._sheet.row_values(0))
+        self._group = group
+
+        self._row_count = len(self._sheet.index)
+        self._col_count = len(self._sheet.columns)
+
+        #  print self._row_count, self._col_count
 
         self._row = 0
         self._col = 0
@@ -233,6 +238,7 @@ class SheetInterpreter:
 
     def _FieldDefine(self) :
         field = GetField(self._sheet, self._col)
+        #  print field.rule
 
         if field.rule == "key" :
             field.rule = "required"
@@ -363,15 +369,15 @@ class SheetInterpreter:
 
 class DataParser:
     """解析excel的数据"""
-    def __init__(self, xls_file_path, sheet, group):
+    def __init__(self, xls_file_path, sheet_name, sheet, group):
         self._xls_file_path = xls_file_path
         self._sheet = sheet
-        self._sheet_name = self._sheet.name
+        self._sheet_name = sheet_name
 
         self._group = group
 
-        self._row_count = len(self._sheet.col_values(0))
-        self._col_count = len(self._sheet.row_values(0))
+        self._row_count = len(self._sheet.index)
+        self._col_count = len(self._sheet.columns)
 
         self._row = 0
         self._col = 0
@@ -396,7 +402,7 @@ class DataParser:
         # 先找到定义ID的列
         id_col = 0
         for id_col in range(self._col_count) :
-            info_id = str(self._sheet.cell_value(self._row, id_col)).strip()
+            info_id = str(self._sheet.get_value(self._row, id_col)).strip()
             if info_id == "" :
                 continue
             else :
@@ -404,7 +410,7 @@ class DataParser:
 
         for self._row in range(DATA_BEGIN_ROW, self._row_count) :
             # 如果 id 是 空 直接跳过改行
-            info_id = str(self._sheet.cell_value(self._row, id_col)).strip()
+            info_id = str(self._sheet.get_value(self._row, id_col)).strip()
             if info_id == "" :
                 continue
             item = item_array.items.add()
@@ -425,7 +431,7 @@ class DataParser:
 
     def _ParseField(self, item) :
         field = GetField(self._sheet, self._col)
-        field.value_str = self._sheet.cell_value(self._row, self._col)
+        field.value_str = str(self._sheet.get_value(self._row, self._col))
 
         if field.rule == "key" :
             field.rule = "required"
@@ -493,13 +499,13 @@ class DataParser:
 
 class LuaParser:
     """excel to lua"""
-    def __init__(self, xls_file_path, sheet, group):
+    def __init__(self, xls_file_path, sheet_name, sheet, group):
         self._xls_file_path = xls_file_path
         self._sheet = sheet
-        self._sheet_name = self._sheet.name
+        self._sheet_name = sheet_name
 
-        self._row_count = len(self._sheet.col_values(0))
-        self._col_count = len(self._sheet.row_values(0))
+        self._row_count = len(self._sheet.index)
+        self._col_count = len(self._sheet.columns)
 
         self._group = group
 
@@ -518,7 +524,7 @@ class LuaParser:
     def Parse(self) :
         self.all_str = "-- Generated by xlsconfig (see https://github.com/jameyli/xlsconfig).  DO NOT EDIT!\n"
         self.all_str += "-- source: xls ("+ self._xls_file_path+") sheet ("+ self._sheet_name + ")\n\n"
-        self.all_str += self._sheet.name + "={\n"
+        self.all_str += self._sheet_name + "={\n"
         for self._row in range(DATA_BEGIN_ROW, self._row_count) :
             self._ParseLine()
             self.all_str += self.row_str + ",\n"
@@ -555,7 +561,7 @@ class LuaParser:
     def _ParseField(self) :
         dict_item = {}
         field = GetField(self._sheet, self._col)
-        field.value_str = self._sheet.cell_value(self._row, self._col)
+        field.value_str = str(self._sheet.get_value(self._row, self._col))
 
         if field.rule == "key" :
             field.value = GetLuaValue(field.typename, field.value_str)
@@ -635,39 +641,42 @@ def ProcessOneFile(xls_file_path, output, group) :
         return
 
     try :
-        workbook = xlrd.open_workbook(xls_file_path)
+        workbook = pd.ExcelFile(xls_file_path)
     except BaseException, e :
         print Color.RED + "Open %s failed! File is NOT exist!" %(xls_file_path) + Color.NONE
         sys.exit(-2)
 
-    sheet_name_list = workbook.sheet_names()
+    sheet_name_list = workbook.sheet_names
 
     for sheet_name in sheet_name_list :
         if (not sheet_name.isupper()):
             print "Skip %s" %(sheet_name)
             continue
 
-        sheet = workbook.sheet_by_name(sheet_name)
+        sheet = workbook.parse(sheet_name, header=None)
+        if ("T." in sheet_name) :
+            sheet = sheet.T
+            sheet_name = sheet_name.split('.')[1]
 
         if output == None :
             output = ["proto", "bytes", "lua"]
 
         if "proto" in output or "bytes" in output:
-            interpreter = SheetInterpreter(xls_file_path, sheet)
+            interpreter = SheetInterpreter(xls_file_path, sheet_name, sheet)
             interpreter.Interpreter()
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
         if "bytes" in output:
-            parser = DataParser(xls_file_path, sheet, group)
+            parser = DataParser(xls_file_path, sheet_name, sheet, group)
             parser.Parse()
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
         if "lua" in output:
-            parser = LuaParser(xls_file_path, sheet, group)
+            parser = LuaParser(xls_file_path, sheet_name, sheet, group)
             parser.Parse()
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, parser._data_file_name) + Color.NONE
 
-    workbook.release_resources()
+    workbook.close()
 
 def ProcessPath(file_path, output, group) :
     if os.path.isfile(file_path) :
