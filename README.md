@@ -49,23 +49,44 @@ sheet 名以 "T." 开头
 * TODO 更多的内置类型
 
 ### 依赖:
-* protobuf
+* python2.7
+* protoc (protobuf-2.6.1)
+
+    https://developers.google.com/protocol-buffers/
+
+* protobuf-2.6.1-py2.7
+
+     `` easy_install 3rdparty/protobuf-2.6.1-py2.7.egg ``
+
 * xlrd
 
+    `` pip install xlrd ``
+
+* pandas
+
+    `` pip install pandas ``
+
+* lua optional
+
+#### Windows issue
+* 设置环境变量，保证工具能够找到需要的二进制
+* lua 二进制 重命名 去掉 版本信息
+
 ## Run Example
-```
-     ../xls_config_tools.py example/goods.xls
-```
+
+`` ../xls_config_tools.py example/goods.xls ``
+
 输出 output 目录, 每个页签独立, 都分别输出以下文件
+
 * .proto 配置的定义, 基于PB，程序可选择静态编译对应的语言，或者运行时动态载入
 * .bytes 配置内容 proto 编码后的二进制格式，可以使用对应的PB定义直接解码读取
-* .json 配置内容 proto 编码后的明文(json)格式，可以使用对应的PB直接读取
+* .text 配置内容 proto 编码后的文本格式，可以使用对应的PB直接读取
 * .py 由 proto 生成的 python 脚本，工具自己生成，可删除
-* .log 工具运行日志
 
 ## 程序中如何读取？
 ### C++
-```c++
+
+```cpp
 #include <cstdio>
 #include <string>
 #include "xlsconfig_goods_conf.pb.h"
