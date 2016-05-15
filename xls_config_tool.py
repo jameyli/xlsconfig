@@ -260,8 +260,8 @@ class SheetInterpreter:
                 self._is_layout = True
 
             self._col += 1
-            if self._group != None and field.group != None and (field.group not in self._group) :
-                self._is_layout = False
+            #  if self._group != None and field.group != None and (field.group not in self._group) :
+            #      self._is_layout = False
 
             col_begin = self._col
             self._StructDefine(field.struct.struct_name, field.struct.field_num, field.comment)
@@ -270,8 +270,8 @@ class SheetInterpreter:
             self._col += (field.struct.repeated_num-1) * (col_end-col_begin)
 
             self._is_layout = True
-            if self._group != None and field.group != None and (field.group not in self._group) :
-                return
+            #  if self._group != None and field.group != None and (field.group not in self._group) :
+            #      return
 
             field.rule = "repeated"
             self._LayoutOneField(field)
