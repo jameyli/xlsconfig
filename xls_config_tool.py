@@ -176,7 +176,7 @@ def GetField(sheet, col) :
 
 class SheetInterpreter:
     """通过excel配置生成配置的protobuf定义文件"""
-    def __init__(self, xls_file_path, sheet_name, sheet):
+    def __init__(self, xls_file_path, sheet_name, sheet, group):
         self._xls_file_path = xls_file_path
         self._sheet = sheet
         self._sheet_name = sheet_name
@@ -246,9 +246,11 @@ class SheetInterpreter:
             #          + " " + field.name + " = " + self._GetAndAddFieldIndex() + ";\n")
 
         if field.rule in ["required", "optional", "repeated"] :
+            self._col += 1
+            if self._group != None and field.group != None and (field.group not in self._group) :
+                return
             self._LayoutComment(field.comment)
             self._LayoutOneField(field)
-            self._col += 1
 
         elif field.rule == "struct":
             if (self._IsStructDefined(field.struct.struct_name)) :
@@ -258,15 +260,21 @@ class SheetInterpreter:
                 self._is_layout = True
 
             self._col += 1
+            if self._group != None and field.group != None and (field.group not in self._group) :
+                self._is_layout = False
 
             col_begin = self._col
             self._StructDefine(field.struct.struct_name, field.struct.field_num, field.comment)
             col_end = self._col
 
+            self._col += (field.struct.repeated_num-1) * (col_end-col_begin)
+
+            self._is_layout = True
+            if self._group != None and field.group != None and (field.group not in self._group) :
+                return
+
             field.rule = "repeated"
             self._LayoutOneField(field)
-
-            self._col += (field.struct.repeated_num-1) * (col_end-col_begin)
 
         else :
             self._col += 1
@@ -653,6 +661,13 @@ def ProcessOneFile(xls_file_path, output, group) :
             print "Skip %s" %(sheet_name)
             continue
 
+        if ("=" in sheet_name) :
+            sheet_name = sheet_name.split('=')[0]
+            sheet_group = sheet_name.split('=')[1]
+            if group != None and sheet_group != None and (sheet_group not in group) :
+                print "Skip %s" %(sheet_name)
+                continue
+
         sheet = workbook.parse(sheet_name, header=None)
         if ("T." in sheet_name) :
             sheet = sheet.T
@@ -662,7 +677,7 @@ def ProcessOneFile(xls_file_path, output, group) :
             output = ["proto", "bytes", "lua"]
 
         if "proto" in output or "bytes" in output:
-            interpreter = SheetInterpreter(xls_file_path, sheet_name, sheet)
+            interpreter = SheetInterpreter(xls_file_path, sheet_name, sheet, group)
             interpreter.Interpreter()
             print Color.GREEN + "Parse %s of %s TO %s Success!!!" %(sheet_name, xls_file_path, interpreter._pb_file_name) + Color.NONE
 
